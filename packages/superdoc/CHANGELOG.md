@@ -1,3 +1,10 @@
+# [1.5.0-next.9](https://github.com/superdoc-dev/superdoc/compare/v1.5.0-next.8...v1.5.0-next.9) (2026-01-13)
+
+
+### Bug Fixes
+
+* remove pm position on hover ([#1726](https://github.com/superdoc-dev/superdoc/issues/1726)) ([8bdacc3](https://github.com/superdoc-dev/superdoc/commit/8bdacc326dc5883533ec155e7e2b2794a19278de))
+
 # [1.5.0-next.8](https://github.com/superdoc-dev/superdoc/compare/v1.5.0-next.7...v1.5.0-next.8) (2026-01-13)
 
 
