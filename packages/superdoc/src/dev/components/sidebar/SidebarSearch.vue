@@ -31,9 +31,6 @@ const goToResult = (match) => {
     editor.commands.goToSearchResult(match);
     return;
   }
-  if (editor?.commands?.setTextSelection) {
-    editor.commands.setTextSelection({ from: match.from, to: match.to });
-  }
 };
 </script>
 
