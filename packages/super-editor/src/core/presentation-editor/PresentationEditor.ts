@@ -267,7 +267,6 @@ export class PresentationEditor extends EventEmitter {
   #layoutErrorState: 'healthy' | 'degraded' | 'failed' = 'healthy';
   #errorBanner: HTMLElement | null = null;
   #errorBannerMessage: HTMLElement | null = null;
-  #telemetryEmitter: ((event: TelemetryEvent) => void) | null = null;
   #renderScheduled = false;
   #pendingDocChange = false;
   #pendingMapping: Mapping | null = null;
@@ -1150,31 +1149,6 @@ export class PresentationEditor extends EventEmitter {
   onLayoutError(handler: (error: LayoutError) => void) {
     this.on('layoutError', handler);
     return () => this.off('layoutError', handler);
-  }
-
-  /**
-   * Attach a telemetry listener to capture layout events/errors.
-   * Uses type-safe discriminated union for event handling.
-   *
-   * @param handler - Callback function receiving telemetry events
-   * @returns Unsubscribe function to remove the handler
-   *
-   * @example
-   * ```typescript
-   * const unsubscribe = editor.onTelemetry((event) => {
-   *   if (event.type === 'remoteCursorsRender') {
-   *     console.log(`Rendered ${event.data.visibleCount} cursors in ${event.data.renderTimeMs}ms`);
-   *   }
-   * });
-   * ```
-   */
-  onTelemetry(handler: (event: TelemetryEvent) => void) {
-    this.#telemetryEmitter = handler;
-    return () => {
-      if (this.#telemetryEmitter === handler) {
-        this.#telemetryEmitter = null;
-      }
-    };
   }
 
   /**
@@ -2387,8 +2361,6 @@ export class PresentationEditor extends EventEmitter {
     this.emit('remoteCursorsUpdate', {
       cursors: Array.from(this.#remoteCursorManager.state.values()),
     });
-
-    // Optional telemetry - now handled by the manager via callback
   }
 
   /**
@@ -4200,9 +4172,6 @@ export class PresentationEditor extends EventEmitter {
         }
       }
 
-      if (this.#telemetryEmitter && metrics) {
-        this.#telemetryEmitter({ type: 'layout', data: { layout, blocks, measures, metrics } });
-      }
       this.#selectionSync.requestRender({ immediate: true });
 
       // Trigger cursor re-rendering on layout changes without re-normalizing awareness
@@ -6378,9 +6347,6 @@ export class PresentationEditor extends EventEmitter {
     }
 
     this.emit('layoutError', this.#layoutError);
-    if (this.#telemetryEmitter) {
-      this.#telemetryEmitter({ type: 'error', data: this.#layoutError });
-    }
     this.#showLayoutErrorBanner(error);
   }
 
