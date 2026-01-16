@@ -1,3 +1,13 @@
+# [1.8.0-next.2](https://github.com/superdoc-dev/superdoc/compare/v1.8.0-next.1...v1.8.0-next.2) (2026-01-16)
+
+
+### Bug Fixes
+
+* add addToHistory to new insertTrackedChange command ([#1767](https://github.com/superdoc-dev/superdoc/issues/1767)) ([e5081be](https://github.com/superdoc-dev/superdoc/commit/e5081be4abdc108f348ea91b95092ae643567c91))
+* annotation selection ([#1762](https://github.com/superdoc-dev/superdoc/issues/1762)) ([1c831cc](https://github.com/superdoc-dev/superdoc/commit/1c831cca106584d094f9d07c00f22fd51374ef1e))
+* guard against null editor ref in telemetry handler ([#1763](https://github.com/superdoc-dev/superdoc/issues/1763)) ([16b3a9a](https://github.com/superdoc-dev/superdoc/commit/16b3a9a2d4f5155ea967b4bbe6c2aadb996daef0))
+* preserve nested comment ranges on export (SD-1518) ([#1765](https://github.com/superdoc-dev/superdoc/issues/1765)) ([9b81f9a](https://github.com/superdoc-dev/superdoc/commit/9b81f9a3c265e3a22d6286fec7557d489287c798))
+
 # [1.8.0-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.7.0...v1.8.0-next.1) (2026-01-16)
 
 
