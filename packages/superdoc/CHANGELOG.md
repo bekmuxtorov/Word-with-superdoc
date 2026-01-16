@@ -1,3 +1,10 @@
+# [1.7.0-next.10](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.9...v1.7.0-next.10) (2026-01-16)
+
+
+### Bug Fixes
+
+* keepNext rules for paragraphs ([#1758](https://github.com/superdoc-dev/superdoc/issues/1758)) ([7862892](https://github.com/superdoc-dev/superdoc/commit/7862892c85235fdf67bafe562070f0780888b356))
+
 # [1.7.0-next.9](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.8...v1.7.0-next.9) (2026-01-16)
 
 
