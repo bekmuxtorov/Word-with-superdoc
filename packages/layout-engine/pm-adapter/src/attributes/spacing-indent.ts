@@ -222,6 +222,7 @@ export const normalizeAlignment = (value: unknown): NormalizedParagraphAlignment
  * properties (before, after, line) and alternative properties (lineSpaceBefore, lineSpaceAfter).
  * For auto line spacing, values <= 10 are treated as multipliers, larger values are treated as
  * OOXML "240ths of a line" and converted to multipliers (e.g., 276 -> 1.15).
+ * If w:line is present but w:lineRule is missing, defaults to 'auto' per OOXML.
  *
  * @param value - Raw OOXML spacing object with properties like before, after, line, lineRule
  * @returns Normalized spacing object with values in pixels, or undefined if no valid spacing
@@ -246,18 +247,19 @@ export const normalizeParagraphSpacing = (value: unknown): ExtendedParagraphSpac
   const afterRaw = pickNumber(source.after);
   const lineRaw = pickNumber(source.line);
   const lineRule = normalizeLineRule(source.lineRule);
+  const resolvedLineRule = lineRule ?? (lineRaw != null ? 'auto' : undefined);
   const beforeAutospacing = toBooleanFlag(source.beforeAutospacing ?? source.beforeAutoSpacing);
   const afterAutospacing = toBooleanFlag(source.afterAutospacing ?? source.afterAutoSpacing);
   const contextualSpacing = toBooleanFlag(source.contextualSpacing);
 
   const before = beforeRaw != null ? twipsToPx(beforeRaw) : pickNumber(source.lineSpaceBefore);
   const after = afterRaw != null ? twipsToPx(afterRaw) : pickNumber(source.lineSpaceAfter);
-  const line = normalizeLineValue(lineRaw, lineRule);
+  const line = normalizeLineValue(lineRaw, resolvedLineRule);
 
   if (before != null) spacing.before = before;
   if (after != null) spacing.after = after;
   if (line != null) spacing.line = line;
-  if (lineRule) spacing.lineRule = lineRule;
+  if (resolvedLineRule) spacing.lineRule = resolvedLineRule;
   if (beforeAutospacing != null) spacing.beforeAutospacing = beforeAutospacing;
   if (afterAutospacing != null) spacing.afterAutospacing = afterAutospacing;
   if (contextualSpacing != null) spacing.contextualSpacing = contextualSpacing;

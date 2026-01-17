@@ -385,10 +385,11 @@ describe('normalizeParagraphSpacing', () => {
       expect(result?.after).toBe(20);
     });
 
-    it('should normalize line spacing', () => {
-      const input = { line: 225 }; // 15px in twips (15 * 15)
+    it('should normalize line spacing with default auto lineRule', () => {
+      const input = { line: 225 }; // 225/240 = 0.9375 lines
       const result = normalizeParagraphSpacing(input);
-      expect(result?.line).toBe(15);
+      expect(result?.line).toBeCloseTo(0.9375);
+      expect(result?.lineRule).toBe('auto');
     });
 
     it('should normalize lineRule', () => {
@@ -464,6 +465,12 @@ describe('normalizeParagraphSpacing', () => {
       const result = normalizeParagraphSpacing(input);
       expect(result?.before).toBe(10.5);
       expect(result?.after).toBeCloseTo(20.75, 1);
+    });
+
+    it('should not set lineRule when line is absent', () => {
+      const input = { before: 240, after: 240 };
+      const result = normalizeParagraphSpacing(input);
+      expect(result?.lineRule).toBeUndefined();
     });
   });
 
