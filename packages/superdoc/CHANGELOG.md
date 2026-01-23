@@ -1,3 +1,10 @@
+## [1.8.2-next.4](https://github.com/superdoc-dev/superdoc/compare/v1.8.2-next.3...v1.8.2-next.4) (2026-01-23)
+
+
+### Bug Fixes
+
+* table indent ([#1794](https://github.com/superdoc-dev/superdoc/issues/1794)) ([fb0563e](https://github.com/superdoc-dev/superdoc/commit/fb0563eab536288c51ad2d3961570dad25aa09e1))
+
 ## [1.8.2-next.3](https://github.com/superdoc-dev/superdoc/compare/v1.8.2-next.2...v1.8.2-next.3) (2026-01-23)
 
 
