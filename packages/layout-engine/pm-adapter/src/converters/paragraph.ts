@@ -497,6 +497,34 @@ const applyInlineRunProperties = (
 };
 
 /**
+ * Extracts the default font family and size from paragraph properties.
+ * Used for creating default runs in empty paragraphs.
+ * @param converterContext - Converter context with document styles
+ * @param paragraphProperties - Resolved paragraph properties
+ * @returns Object with defaultFont and defaultSize
+ */
+function extractDefaultFontProperties(
+  converterContext: ConverterContext,
+  paragraphProperties: ParagraphProperties,
+): { defaultFont: string; defaultSize: number } {
+  const defaultRunAttrs = computeRunAttrs(
+    resolveRunProperties(
+      converterContext,
+      paragraphProperties.runProperties,
+      paragraphProperties,
+      converterContext.tableInfo,
+      false,
+      false,
+    ),
+    converterContext,
+  );
+  return {
+    defaultFont: defaultRunAttrs.fontFamily!,
+    defaultSize: defaultRunAttrs.fontSize!,
+  };
+}
+
+/**
  * Converts a paragraph PM node to an array of FlowBlocks.
  *
  * This is the main entry point for paragraph conversion. It handles:
@@ -509,9 +537,6 @@ const applyInlineRunProperties = (
  * @param para - Paragraph PM node to convert
  * @param nextBlockId - Block ID generator
  * @param positions - Position map for PM node tracking
- * @param defaultFont - Default font family
- * @param defaultSize - Default font size
- * @param styleContext - Style resolution context
  * @param trackedChanges - Optional tracked changes configuration
  * @param bookmarks - Optional bookmark position map
  * @param hyperlinkConfig - Hyperlink configuration
@@ -525,9 +550,6 @@ export function paragraphToFlowBlocks({
   para,
   nextBlockId,
   positions,
-  defaultFont,
-  defaultSize,
-  styleContext,
   trackedChangesConfig,
   bookmarks,
   hyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
@@ -551,6 +573,7 @@ export function paragraphToFlowBlocks({
       : undefined;
   const hasSectPr = Boolean(rawParagraphProps?.sectPr);
   const isSectPrMarker = hasSectPr || paraAttrs.pageBreakSource === 'sectPr';
+  const { defaultFont, defaultSize } = extractDefaultFontProperties(converterContext, resolvedParagraphProperties);
 
   if (paragraphAttrs.pageBreakBefore) {
     blocks.push({
@@ -936,6 +959,7 @@ export function paragraphToFlowBlocks({
             enableComments,
           );
         }
+        applyInlineRunProperties(tokenRun as TextRun, activeRunProperties, converterContext);
         console.debug('[token-debug] paragraph-token-run', {
           token: (tokenRun as TextRun).token,
           fontFamily: (tokenRun as TextRun).fontFamily,
@@ -1102,9 +1126,6 @@ export function paragraphToFlowBlocks({
           node,
           nextBlockId,
           positions,
-          defaultFont,
-          defaultSize,
-          styleContext,
           trackedChangesConfig,
           bookmarks,
           hyperlinkConfig,
@@ -1248,9 +1269,6 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     recordBlockKind,
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -1283,9 +1301,6 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     para: node,
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
