@@ -1,3 +1,10 @@
+# [1.9.0-next.12](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.11...v1.9.0-next.12) (2026-01-28)
+
+
+### Bug Fixes
+
+* text in new paragraph doesn't inherit styles (SD-1657) ([#1869](https://github.com/superdoc-dev/superdoc/issues/1869)) ([275fef2](https://github.com/superdoc-dev/superdoc/commit/275fef25f4ccd4ab511e66cca557abcebe79f4ef))
+
 # [1.9.0-next.11](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.10...v1.9.0-next.11) (2026-01-28)
 
 
