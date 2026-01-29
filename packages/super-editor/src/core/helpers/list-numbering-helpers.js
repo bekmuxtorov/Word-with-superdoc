@@ -186,6 +186,14 @@ export const changeNumIdSameAbstract = (numId, level, listType, editor) => {
 
   const newNumDef = getBasicNumIdTag(newId, newAbstractId);
   newNumbering.definitions[newId] = newNumDef;
+  const newTranslatedNumbering = { ...(editor.converter.translatedNumbering || {}) };
+  if (!newTranslatedNumbering.definitions) newTranslatedNumbering.definitions = {};
+  if (!newTranslatedNumbering.abstracts) newTranslatedNumbering.abstracts = {};
+  // @ts-expect-error Remaining parameters are not needed for this translator
+  newTranslatedNumbering.definitions[newId] = wNumTranslator.encode({ nodes: [newNumDef] });
+  // @ts-expect-error Remaining parameters are not needed for this translator
+  newTranslatedNumbering.abstracts[newAbstractId] = wAbstractNumTranslator.encode({ nodes: [newAbstractDef] });
+  editor.converter.translatedNumbering = newTranslatedNumbering;
   // Persist updated numbering so downstream exporters can resolve the ID
   editor.converter.numbering = newNumbering;
   return newId;
@@ -370,7 +378,7 @@ export const getAllListDefinitions = (editor) => {
       const ilvl = levelDef.ilvl;
 
       const customFormat = levelDef.numFmt?.val === 'custom' ? levelDef.numFmt.format : null;
-      const start = definition.lvlOverrides?.[ilvl]?.startOverride || levelDef.start;
+      const start = definition.lvlOverrides?.[ilvl]?.startOverride ?? levelDef.start;
 
       acc[numId][ilvl] = {
         start,
