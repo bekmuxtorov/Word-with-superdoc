@@ -1,3 +1,10 @@
+# [1.10.0-next.2](https://github.com/superdoc-dev/superdoc/compare/v1.10.0-next.1...v1.10.0-next.2) (2026-01-29)
+
+
+### Bug Fixes
+
+* **super-editor:** preserve toolbar style marks when wrapping runs ([9dbcdd2](https://github.com/superdoc-dev/superdoc/commit/9dbcdd21023f0467ca689bb6d21bb79431bf4370))
+
 # [1.10.0-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.9.1-next.1...v1.10.0-next.1) (2026-01-29)
 
 
