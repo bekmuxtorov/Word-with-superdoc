@@ -80,15 +80,19 @@ jobs:
           (list files reviewed)
 
           ### Findings
-          (For each finding, include:)
-          **Issue**: <description>
-          **Location**: <file:line>
-          **Spec Reference**: ECMA-376 Part X, Section Y.Z
-          **Expected**: <what the spec says>
-          **Actual**: <what the code does>
+          (If FAIL, list each issue briefly. Keep it concise - one line per issue.)
+
+          | Element | Issue | Location |
+          |---------|-------|----------|
+          | w:element | Brief description of the problem | file.js:123 |
 
           ### Recommendation
-          (What should be fixed, or 'No action required' if passing)
+          (Brief fix suggestion, or 'No action required' if passing)
+
+          IMPORTANT:
+          - Keep findings BRIEF - just identify the problem, don't explain the full spec
+          - Do NOT include lengthy spec quotations in the output
+          - Users can look up spec details at https://ooxml.dev/spec
 
           ---
 
@@ -115,7 +119,7 @@ jobs:
             printf '%s\n' "$REVIEW"
             echo
             echo "---"
-            echo "*Automated review using [ECMA-376 MCP Server](https://ooxml.dev)*"
+            echo "Look up elements in the spec: [ooxml.dev/spec](https://ooxml.dev/spec)"
           } > /tmp/review-comment.md
 
           echo "review<<EOF" >> $GITHUB_OUTPUT
