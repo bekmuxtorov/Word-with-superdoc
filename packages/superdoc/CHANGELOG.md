@@ -1,3 +1,23 @@
+# [1.10.0](https://github.com/superdoc-dev/superdoc/compare/v1.9.0...v1.10.0) (2026-01-30)
+
+
+### Bug Fixes
+
+* **collaboration:** add debouncing to header/footer Y.Doc updates ([#1861](https://github.com/superdoc-dev/superdoc/issues/1861)) ([90d0f65](https://github.com/superdoc-dev/superdoc/commit/90d0f6549e9c207e127da72466a41c63035c7c85))
+* comment text after enter break is dropped on render and export ([#1853](https://github.com/superdoc-dev/superdoc/issues/1853)) ([ce7f553](https://github.com/superdoc-dev/superdoc/commit/ce7f5534afaa8e46cb4d4e41fb6478575dea26e3))
+* **comments:** pass superdoc instance when canceling pending comment ([#1862](https://github.com/superdoc-dev/superdoc/issues/1862)) ([4982bac](https://github.com/superdoc-dev/superdoc/commit/4982bac97c5f7e141d7029b9ba7b832ee509e165))
+* horizontal rule ([#1875](https://github.com/superdoc-dev/superdoc/issues/1875)) ([4b3b92e](https://github.com/superdoc-dev/superdoc/commit/4b3b92ee168adcc06c7c4c927716ebcfec94311e))
+* selection/caret issues ([#1865](https://github.com/superdoc-dev/superdoc/issues/1865)) ([3f627fb](https://github.com/superdoc-dev/superdoc/commit/3f627fbe83e715bb9b5b01f6711d6d84b57e2ed6))
+* **super-editor:** preserve toolbar style marks when wrapping runs ([9dbcdd2](https://github.com/superdoc-dev/superdoc/commit/9dbcdd21023f0467ca689bb6d21bb79431bf4370))
+* table width ([#1876](https://github.com/superdoc-dev/superdoc/issues/1876)) ([46a635c](https://github.com/superdoc-dev/superdoc/commit/46a635cc946900beebccd284f6ab9d750365b4bf))
+* use stable comment ids for imported comments ([#1863](https://github.com/superdoc-dev/superdoc/issues/1863)) ([0c330d0](https://github.com/superdoc-dev/superdoc/commit/0c330d0394e6b18d942a7a3ed6f090a5b9f036e4))
+
+
+### Features
+
+* add CLAUDE.md/AGENTS.md navigation files for AI tools ([#1878](https://github.com/superdoc-dev/superdoc/issues/1878)) ([db98d62](https://github.com/superdoc-dev/superdoc/commit/db98d62dde6d6ccb28142af46c0abff8bee3d469))
+* **track-changes:** add emitCommentEvent option to suppress sidebar bubbles ([#1880](https://github.com/superdoc-dev/superdoc/issues/1880)) ([87a2f24](https://github.com/superdoc-dev/superdoc/commit/87a2f2417322665f9f041f1a7d28642e95b5ea83))
+
 # [1.10.0-next.5](https://github.com/superdoc-dev/superdoc/compare/v1.10.0-next.4...v1.10.0-next.5) (2026-01-30)
 
 
