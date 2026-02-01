@@ -14,8 +14,8 @@ Commands:
   read <file>                    Extract plain text
 
 Options:
-  --json    Machine-readable output
-  --help    Show this message
+  --json        Machine-readable output
+  -h, --help    Show this message
 
 Examples:
   superdoc search "indemnification" ./contracts/*.docx
