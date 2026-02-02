@@ -108,7 +108,7 @@ async function main() {
         const files = await expandGlobs(filePatterns);
 
         if (files.length === 0) {
-          console.error('No .docx files found matching the pattern');
+          console.error('No .docx files found matching the pattern.');
           process.exit(1);
         }
 
@@ -131,7 +131,7 @@ async function main() {
         const files = await expandGlobs(filePatterns);
 
         if (files.length === 0) {
-          console.error('No .docx files found matching the pattern');
+          console.error('No .docx files found matching the pattern.');
           process.exit(1);
         }
 
