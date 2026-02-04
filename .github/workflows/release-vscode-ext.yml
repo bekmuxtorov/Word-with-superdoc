@@ -40,7 +40,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build
+      - name: Build superdoc
+        run: pnpm run build
+
+      - name: Build vscode-ext
         run: pnpm run build
         working-directory: apps/vscode-ext
 
