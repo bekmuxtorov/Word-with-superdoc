@@ -2,12 +2,12 @@
 .vscode-test/**
 src/**
 .gitignore
-.eslintrc.json
+.releaserc.cjs
 **/*.map
 **/*.ts
-**/.eslintrc.json
 **/tsconfig.json
 **/webpack.config.js
 node_modules/**
+out/**
 !dist/**
 !webview/**

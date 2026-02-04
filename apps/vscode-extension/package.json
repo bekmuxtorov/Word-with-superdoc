@@ -1,10 +1,10 @@
 {
-  "name": "superdoc-vscode-extension",
+  "name": "@superdoc-dev/vscode-extension",
   "displayName": "SuperDoc for VS Code",
   "description": "Open and edit Word documents (.docx) directly in VS Code using SuperDoc",
   "version": "0.1.0",
   "publisher": "superdoc",
-  "repository": "https://github.com/superdoc-dev/vscode-extension",
+  "repository": "https://github.com/superdoc-dev/superdoc",
   "engines": {
     "vscode": "^1.107.0"
   },
@@ -65,29 +65,32 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "npm run compile-extension && npm run compile-webview && npm run copy-assets",
-    "compile-extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
-    "compile-webview": "esbuild webview/main.js --bundle --outfile=dist/webview/main.js --format=esm --platform=browser --target=es2020 --loader:.css=text",
+    "compile": "pnpm run compile:ext && pnpm run compile:webview && pnpm run copy-assets",
+    "compile:ext": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "compile:webview": "esbuild webview/main.js --bundle --outfile=dist/webview/main.js --format=esm --platform=browser --target=es2020 --loader:.css=text",
     "copy-assets": "cp webview/style.css dist/webview/",
-    "watch": "npm run compile -- --watch",
-    "package": "vsce package",
-    "publish": "vsce publish",
-    "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js"
+    "build": "pnpm run compile",
+    "watch": "pnpm run compile:ext -- --watch",
+    "package": "vsce package --no-dependencies",
+    "publish:vsce": "vsce publish",
+    "lint": "eslint .",
+    "lint:fix": "eslint --fix .",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "release": "pnpx semantic-release",
+    "release:dry-run": "pnpx semantic-release --dry-run",
+    "vscode:prepublish": "pnpm run build"
   },
   "devDependencies": {
-    "@types/node": "^20.19.27",
+    "@semantic-release/exec": "^6.0.3",
+    "@types/node": "catalog:",
     "@types/vscode": "^1.107.0",
-    "@typescript-eslint/eslint-plugin": "^6.21.0",
-    "@typescript-eslint/parser": "^6.21.0",
     "@vscode/vsce": "^2.32.0",
     "esbuild": "^0.19.12",
-    "eslint": "^8.57.1",
-    "typescript": "^5.9.3"
+    "typescript": "catalog:"
   },
-  "license": "MIT",
   "dependencies": {
-    "superdoc": "^1.5.0"
-  }
+    "superdoc": "workspace:*"
+  },
+  "license": "AGPL-3.0"
 }
