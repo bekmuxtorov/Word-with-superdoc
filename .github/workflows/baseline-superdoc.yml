@@ -211,7 +211,7 @@ jobs:
           SD_TESTING_R2_SECRET_ACCESS_KEY: ${{ secrets.SD_TESTING_R2_SECRET_ACCESS_KEY }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          pnpm baseline "$VERSION" --ci --filter watermarks
+          pnpm baseline "$VERSION" --ci
 
       - name: Summary
         if: steps.version.outputs.skip != 'true'
