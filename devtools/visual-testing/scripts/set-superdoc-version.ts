@@ -251,18 +251,22 @@ function main(): void {
   console.log('');
   console.log(colors.info('Installing...'));
 
-  const installResult = spawnSync('pnpm', ['--filter', '@superdoc-testing/harness', 'install', '--loglevel', 'error'], {
-    cwd: workspaceRoot,
-    stdio: 'inherit',
-    env: {
-      ...process.env,
-      PNPM_IGNORE_PEER_DEPENDENCIES: '1',
-      PNPM_LOG_LEVEL: 'error',
-      NPM_CONFIG_LOGLEVEL: 'error',
-      PNPM_LINK_WORKSPACE_PACKAGES: 'false',
-      PNPM_PREFER_WORKSPACE_PACKAGES: 'false',
+  const installResult = spawnSync(
+    'pnpm',
+    ['--filter', '@superdoc-testing/harness', 'install', '--no-frozen-lockfile', '--loglevel', 'error'],
+    {
+      cwd: workspaceRoot,
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        PNPM_IGNORE_PEER_DEPENDENCIES: '1',
+        PNPM_LOG_LEVEL: 'error',
+        NPM_CONFIG_LOGLEVEL: 'error',
+        PNPM_LINK_WORKSPACE_PACKAGES: 'false',
+        PNPM_PREFER_WORKSPACE_PACKAGES: 'false',
+      },
     },
-  });
+  );
 
   if (installResult.error) {
     console.error(colors.error(`pnpm install failed: ${installResult.error.message}`));
