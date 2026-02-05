@@ -691,6 +691,11 @@ if (isMainModule) {
     .then((exitCode) => {
       logCi(`generate-interactions cleanup complete (exit ${exitCode}).`);
       process.exitCode = exitCode;
+      if (IS_CI_MODE) {
+        logCi('Forcing process exit in CI to avoid hanging handles.');
+        const timer = setTimeout(() => process.exit(exitCode), 500);
+        timer.unref?.();
+      }
     })
     .catch((error) => {
       console.error(colors.error(`Fatal error: ${error instanceof Error ? error.message : String(error)}`));
