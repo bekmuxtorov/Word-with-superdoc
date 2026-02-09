@@ -15,7 +15,7 @@ import { DOCX, PDF, HTML, getFileObject, compareVersions } from '@superdoc/commo
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
 import { getSchemaIntrospection } from './helpers/schema-introspection.js';
 
-// Main entry point for SuperDoc library
+// SuperDoc library
 export { SuperDoc } from './core/SuperDoc.js';
 export {
   BlankDOCX,
