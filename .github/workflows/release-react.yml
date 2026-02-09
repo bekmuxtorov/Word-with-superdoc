@@ -6,15 +6,8 @@ on:
   push:
     branches:
       - main
-      - feat/react-wrapper
     paths:
       - 'packages/react/**'
-      - 'packages/superdoc/**'
-      - 'packages/layout-engine/**'
-      - 'packages/super-editor/**'
-      - 'packages/ai/**'
-      - 'packages/word-layout/**'
-      - 'packages/preset-geometry/**'
       - '!**/*.md'
   workflow_dispatch:
 
