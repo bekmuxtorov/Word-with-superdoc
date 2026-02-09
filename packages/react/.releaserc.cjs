@@ -5,10 +5,10 @@ const config = {
   branches: [
     { name: 'stable', channel: 'latest' },
     { name: 'main', prerelease: 'next', channel: 'next' },
-    { name: 'feat/react-wrapper', prerelease: 'rc', channel: 'rc' },
   ],
   tagFormat: 'react-v${version}',
   plugins: [
+    'semantic-release-commit-filter',
     '@semantic-release/commit-analyzer',
     '@semantic-release/release-notes-generator',
     ['@semantic-release/npm', { npmPublish: true }],
