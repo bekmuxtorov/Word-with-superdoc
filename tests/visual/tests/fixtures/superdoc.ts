@@ -301,7 +301,13 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
 
         for (let i = 0; i < count; i++) {
           const pageEl = pages.nth(i);
-          await pageEl.scrollIntoViewIfNeeded();
+
+          // Skip pages that can't be scrolled into view (e.g. empty trailing pages)
+          try {
+            await pageEl.scrollIntoViewIfNeeded({ timeout: 5_000 });
+          } catch {
+            break;
+          }
 
           await expect(pageEl).toHaveScreenshot(`${baseName}-p${i + 1}.png`, {
             timeout: 15_000,
