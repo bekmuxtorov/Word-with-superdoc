@@ -29,7 +29,7 @@ import {
   getSdtContainerKey,
   type SdtBoundaryOptions,
 } from '../utils/sdt-helpers.js';
-import { normalizeZIndex } from '@superdoc/pm-adapter/utilities.js';
+import { normalizeZIndex } from '@superdoc/pm-adapter/utilities';
 
 /**
  * Default gap between list marker and text content in pixels.

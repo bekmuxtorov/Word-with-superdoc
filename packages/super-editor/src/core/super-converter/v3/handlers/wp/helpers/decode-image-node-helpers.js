@@ -38,22 +38,35 @@ export const translateImageNode = (params) => {
   }
   imageName = sanitizeDocxMediaName(imageName);
 
-  let size = attrs.size
-    ? {
-        w: pixelsToEmu(attrs.size.width),
-        h: pixelsToEmu(attrs.size.height),
-      }
-    : imageSize;
+  let size =
+    attrs.size && attrs.size.width
+      ? {
+          w: pixelsToEmu(attrs.size.width),
+          h: pixelsToEmu(attrs.size.height),
+        }
+      : imageSize || { w: 0, h: 0 };
 
   if (originalWidth && originalHeight) {
-    const boxWidthPx = emuToPixels(size.w);
-    const boxHeightPx = emuToPixels(size.h);
-    const { scaledWidth, scaledHeight } = getScaledSize(originalWidth, originalHeight, boxWidthPx, boxHeightPx);
-    size = {
-      w: pixelsToEmu(scaledWidth),
-      h: pixelsToEmu(scaledHeight),
-    };
+    if (!size.w || !size.h) {
+      // If size is missing but we have original dimensions, use them
+      size = {
+        w: pixelsToEmu(originalWidth),
+        h: pixelsToEmu(originalHeight),
+      };
+    } else {
+      const boxWidthPx = emuToPixels(size.w);
+      const boxHeightPx = emuToPixels(size.h);
+      const { scaledWidth, scaledHeight } = getScaledSize(originalWidth, originalHeight, boxWidthPx, boxHeightPx);
+      size = {
+        w: pixelsToEmu(scaledWidth),
+        h: pixelsToEmu(scaledHeight),
+      };
+    }
   }
+
+  // Final safeguard to ensure no NaN in XML
+  if (!size.w || isNaN(size.w)) size.w = pixelsToEmu(100);
+  if (!size.h || isNaN(size.h)) size.h = pixelsToEmu(100);
 
   if (tableCell) {
     // Image inside tableCell
@@ -75,8 +88,20 @@ export const translateImageNode = (params) => {
       addImageRelationshipForId(params, imageId, path);
     }
   } else if (params.node.type === 'image' && !imageId) {
-    const path = src?.split('word/')[1];
-    imageId = addNewImageRelationship(params, path);
+    if (src?.startsWith('data:')) {
+      const ext = src.split(';')[0].split('/')[1] || 'png';
+      const fileName = `image_${generateDocxRandomId()}.${ext}`;
+      const relationshipTarget = `media/${fileName}`;
+      const packagePath = `word/${relationshipTarget}`;
+
+      imageId = addNewImageRelationship(params, relationshipTarget);
+      // Ensure params.media exists
+      if (!params.media) params.media = {};
+      params.media[packagePath] = src;
+    } else {
+      const path = src?.split('word/')[1];
+      imageId = addNewImageRelationship(params, path);
+    }
   } else if (params.node.type === 'fieldAnnotation' && !imageId) {
     const type = src?.split(';')[0].split('/')[1];
     if (!type) {
@@ -269,7 +294,12 @@ function getPngDimensions(base64) {
     };
   }
 
-  let header = base64.split(',')[1].slice(0, 50);
+  // Ensure plenty of header bytes and length divisible by 4 for safe atob
+  let header = base64.split(',')[1].slice(0, 60);
+  if (header.length % 4 !== 0) {
+    header = header.slice(0, header.length - (header.length % 4));
+  }
+
   let uint8 = Uint8Array.from(atob(header), (c) => c.charCodeAt(0));
   let dataView = new DataView(uint8.buffer, 0, 28);
 

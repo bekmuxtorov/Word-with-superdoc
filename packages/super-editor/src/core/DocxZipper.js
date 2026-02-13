@@ -303,7 +303,11 @@ class DocxZipper {
     });
 
     Object.keys(media).forEach((path) => {
-      const binaryData = Buffer.from(media[path], 'base64');
+      let data = media[path];
+      if (typeof data === 'string' && data.startsWith('data:')) {
+        data = data.split(',')[1];
+      }
+      const binaryData = Buffer.from(data, 'base64');
       zip.file(path, binaryData);
     });
 

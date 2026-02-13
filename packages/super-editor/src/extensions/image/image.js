@@ -111,6 +111,11 @@ export const Image = Node.create({
         default: null,
       },
 
+      ignoreRegistration: {
+        default: false,
+        rendered: false,
+      },
+
       rId: {
         default: null,
         rendered: false,

@@ -51,6 +51,10 @@ export const getAliases = (_isDev) => {
     { find: '@superdoc/super-editor/presentation-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.js') },
     { find: '@superdoc/super-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.js') },
 
+    // Explicit aliases for missing packages
+    { find: '@superdoc/font-utils', replacement: path.resolve(__dirname, '../../shared/font-utils/index.js') },
+    { find: '@superdoc/pm-adapter', replacement: path.resolve(__dirname, '../layout-engine/pm-adapter/src') },
+
     // Super Editor aliases
     { find: '@', replacement: '@superdoc/super-editor' },
     ...sourceResolve.alias,
@@ -61,7 +65,7 @@ export const getAliases = (_isDev) => {
 
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode, command}) => {
+export default defineConfig(({ mode, command }) => {
   const skipDts = process.env.SUPERDOC_SKIP_DTS === '1';
   const plugins = [
     vue(),
@@ -71,7 +75,7 @@ export default defineConfig(({ mode, command}) => {
     }),
     copy({
       targets: [
-        { 
+        {
           src: 'node_modules/pdfjs-dist/web/images/*',
           dest: 'dist/images',
         },
@@ -159,7 +163,7 @@ export default defineConfig(({ mode, command}) => {
               'xml-js': ['xml-js'],
             }
           }
-        ],        
+        ],
       }
     },
     optimizeDeps: {

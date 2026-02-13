@@ -18,6 +18,7 @@ import SidebarSearch from './sidebar/SidebarSearch.vue';
 import SidebarFieldAnnotations from './sidebar/SidebarFieldAnnotations.vue';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
+import QRCodeImage from '../../assets/qr.png';
 
 // note:
 // Or set worker globally outside the component.
@@ -53,6 +54,7 @@ const superdocLogo = SuperdocLogo;
 const uploadedFileName = ref('');
 const uploadDisplayName = computed(() => uploadedFileName.value || 'No file chosen');
 const isDragging = ref(false);
+const isMoreMenuOpen = ref(false);
 
 const handleDragOver = (e) => {
   // Only handle file drags from OS
@@ -87,6 +89,74 @@ const getToken = () => {
   const defaultToken =
     'ew0KImFsZyI6ICJIUzI1NiIsDQoidHlwIjogIkpXVCINCn0.ew0KInVzZXJHVUlEIjogIjBmYTVhOWI5LWIzMGItMTFmMC1hZGJmLTI0NGJmZTkzYmEyMyIsDQoiaXNzIjogIkVLT01QTEVLVEFTSVlBIiwNCiJ1bml2ZXJzYWxEYXRlIjogIjIwMjYtMDEtMTJUMDg6MDg6NTYiLA0KImV4cCI6IDE3NzA3OTczMzYsDQoic3ViIjogIldvcmQiLA0KImF1ZCI6ICJqd3RBdXRoIiwNCiJuYmYiOiAxNzY4MjA1MzM2LA0KImlhdCI6IDE3NjgyMDUzMzYNCn0.6tPhT49hdFxWVtmWRERR19mMPZgzzqPtPO_Hj3DI-m4';
   return urlToken || defaultToken;
+};
+
+const handleInsertQRCode = async () => {
+  if (!activeEditor.value) return;
+  
+  const editor = activeEditor.value;
+  const docSize = editor.state.doc.content.size;
+  
+  // Create a new paragraph at the end if needed, or just insert the image
+  // We set selection to end of doc
+  // editor.commands.setTextSelection({ from: docSize });
+  
+  console.log('Schema nodes:', Object.keys(editor.state.schema.nodes));
+  
+  try {
+    // Convert the imported QR code URL to Base64 to ensure it displays and bypasses the plugin
+    const qrUrl = new URL(QRCodeImage, window.location.origin).href;
+    console.log('Fetching QR from:', qrUrl);
+    
+    const response = await fetch(qrUrl);
+    console.log('Response status:', response.status);
+    console.log('Content-Type:', response.headers.get('content-type'));
+    
+    if (!response.ok) throw new Error(`Failed to fetch image: ${response.status}`);
+    
+    const blob = await response.blob();
+    console.log('Blob size:', blob.size);
+    
+    const base64RealQR = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    
+    console.log('Base64 start:', base64RealQR.substring(0, 50) + '...');
+
+    const imageNode = editor.schema.nodes.image.create({
+      src: base64RealQR,
+      alt: 'QR Code',
+      title: '{{qrcode}}',
+      ignoreRegistration: true, // Specific attribute to bypass plugin validation without breaking DOCX export
+      // Use direct style to force size, bypassing complex size logic in extension
+      style: 'width: 100px; height: 100px; border: 1px solid red; display: inline-block;'
+    });
+    
+    console.log('Created image node with real QR');
+    
+    const paragraphNode = editor.schema.nodes.paragraph.create({
+       style: 'text-align: right;' // Align to right like a signature usually is
+    }, imageNode);
+
+    // Insert QR code image at the end of the document
+    // We use a transaction to insert the node directly
+    const tr = editor.state.tr.insert(docSize, paragraphNode);
+    editor.view.dispatch(tr);
+    
+    console.log('Dispatch complete');
+    
+    // Scroll
+    if (editor.view && editor.view.dom) {
+      editor.view.dom.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  } catch (e) {
+    console.error('Error creating/inserting node:', e);
+  }
+
+
 };
 
 const handleLoadFromUrl = async () => {
@@ -660,24 +730,6 @@ const toggleCommentsPanel = () => {
 };
 
 onMounted(async () => {
-<<<<<<< HEAD
-  const urlParam = urlParams.get('url');
-  const idParam = urlParams.get('id');
-
-  if (idParam) {
-    // Priority 1: Load by ID
-    documentUrl.value = `https://ekomplektasiya.uz/Xujjatlar/${idParam}`;
-    await handleLoadFromUrl();
-  } else if (urlParam) {
-    // Priority 2: Load by explicit URL param
-    documentUrl.value = urlParam;
-    await handleLoadFromUrl();
-  } else {
-    // Fallback: Default blank
-    const blankFile = await getFileObject(BlankDOCX, 'test.docx', DOCX);
-    handleNewFile(blankFile);
-  }
-=======
   // Initialize collaboration if enabled via ?collab=1
   if (useCollaboration) {
     const ydoc = new Y.Doc();
@@ -706,9 +758,28 @@ onMounted(async () => {
     console.log('[collab] Provider synced, initializing SuperDoc');
   }
 
-  // Initialize SuperDoc - it will automatically create a blank document
-  init();
->>>>>>> 70f4ba5c9241c481aa42bf169bed09804eb269aa
+  const urlParam = urlParams.get('url');
+  const idParam = urlParams.get('id');
+
+  if (idParam) {
+    // Priority 1: Load by ID
+    documentUrl.value = `https://ekomplektasiya.uz/Xujjatlar/${idParam}`;
+    await handleLoadFromUrl();
+  } else if (urlParam) {
+    // Priority 2: Load by explicit URL param
+    documentUrl.value = urlParam;
+    await handleLoadFromUrl();
+  } else {
+    // Fallback
+    if (useCollaboration) {
+      // If collaboration is active, just init (provider will sync doc)
+      init();
+    } else {
+       // Default blank for non-collab
+       const blankFile = await getFileObject(BlankDOCX, 'test.docx', DOCX);
+       handleNewFile(blankFile);
+    }
+  }
 });
 
 onBeforeUnmount(() => {
@@ -814,78 +885,7 @@ if (scrollTestMode.value) {
     @dragleave.prevent="handleDragLeave"
   >
     <div class="dev-app__layout">
-      <div class="dev-app__header">
-        <div class="dev-app__brand">
-<<<<<<< HEAD
-          <h1 class="dev-app__title">SuperDoc Editor</h1>
-=======
-          <div class="dev-app__logo">
-            <img :src="superdocLogo" alt="SuperDoc logo" />
-          </div>
-          <div class="dev-app__brand-meta">
-            <div class="dev-app__meta-row">
-              <span class="dev-app__pill">SUPERDOC LABS</span>
-              <span class="badge">Layout Engine: {{ useLayoutEngine && !useWebLayout ? 'ON' : 'OFF' }}</span>
-              <span v-if="useWebLayout" class="badge">Web Layout: ON</span>
-              <span v-if="scrollTestMode" class="badge badge--warning">Scroll Test: ON</span>
-              <span v-if="useCollaboration" class="badge badge--collab">Collab: ON</span>
-            </div>
-            <h2 class="dev-app__title">SuperDoc Dev</h2>
-            <div class="dev-app__header-layout-toggle">
-              <div class="dev-app__upload-control">
-                <div class="dev-app__upload-button">
-                  <span class="dev-app__upload-btn">Upload file</span>
-                  <BasicUpload class="dev-app__upload-input" @file-change="handleNewFile" />
-                </div>
-                <span class="dev-app__upload-filename">{{ uploadDisplayName }}</span>
-              </div>
-              <div class="dev-app__url-control">
-                <input
-                  v-model="documentUrl"
-                  type="text"
-                  class="dev-app__url-input"
-                  placeholder="Paste document URL..."
-                  @keydown.enter="handleLoadFromUrl"
-                />
-                <button
-                  class="dev-app__url-btn"
-                  :disabled="isLoadingUrl || !documentUrl.trim()"
-                  @click="handleLoadFromUrl"
-                >
-                  {{ isLoadingUrl ? 'Loading...' : 'Load URL' }}
-                </button>
-              </div>
-            </div>
-          </div>
->>>>>>> 70f4ba5c9241c481aa42bf169bed09804eb269aa
-        </div>
-        <div class="dev-app__header-actions">
-          <div class="dev-app__url-control">
-            <input
-              v-model="documentUrl"
-              type="text"
-              placeholder="Paste document URL here..."
-              class="dev-app__url-input"
-              @keyup.enter="handleLoadFromUrl"
-            />
-            <button class="dev-app__url-btn" @click="handleLoadFromUrl" :disabled="isLoadingUrl">
-              {{ isLoadingUrl ? 'Loading...' : 'Load URL' }}
-            </button>
-            <button class="dev-app__header-export-btn" @click="toggleViewLayout">
-              Turn Web Layout {{ useWebLayout ? 'off' : 'on' }} (reloads)
-            </button>
-          </div>
-          <button class="dev-app__header-export-btn" @click="exportDocx('external')">Saqlash</button>
-          <button
-            class="dev-app__header-export-btn"
-            @click="handleSendFile"
-            :disabled="isSending"
-            style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.35); color: #e2e8f0"
-          >
-            {{ isSending ? 'Yuborilmoqda...' : 'Yuborish' }}
-          </button>
-        </div>
-      </div>
+
 
       <!-- Spacer to push content down and make page scrollable (for testing focus scroll bugs) -->
       <div v-if="scrollTestMode" class="dev-app__scroll-test-spacer">
@@ -899,7 +899,67 @@ if (scrollTestMode.value) {
       </div>
 
       <div class="dev-app__toolbar-ruler-container">
-        <div id="toolbar" class="sd-toolbar"></div>
+        <div class="dev-app__toolbar-row">
+          <div id="toolbar" class="sd-toolbar"></div>
+    <div class="dev-app__toolbar-actions">
+            <button class="dev-app__mini-btn" @click="handleInsertQRCode" title="QR Code qo'shish">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <path d="M3 14h7v7H3z"></path>
+              </svg>
+            </button>
+            <div class="dev-app__more-menu-wrapper">
+              <button class="dev-app__mini-btn dev-app__more-btn" @click="isMoreMenuOpen = !isMoreMenuOpen">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="12" cy="12" r="1" />
+                  <circle cx="12" cy="5" r="1" />
+                  <circle cx="12" cy="19" r="1" />
+                </svg>
+              </button>
+              <div v-if="isMoreMenuOpen" class="dev-app__more-menu">
+                <div class="dev-app__menu-row">
+                  <input
+                    v-model="documentUrl"
+                    type="text"
+                    class="dev-app__mini-input"
+                    placeholder="Load URL..."
+                    @keydown.enter="handleLoadFromUrl"
+                  />
+                  <button class="dev-app__mini-btn" @click="handleLoadFromUrl" :disabled="isLoadingUrl">
+                    Load
+                  </button>
+                </div>
+                <div class="dev-app__menu-divider"></div>
+                <button class="dev-app__menu-item" @click="exportDocx('external')">Saqlash</button>
+                <button class="dev-app__menu-item" @click="handleSendFile" :disabled="isSending">
+                  {{ isSending ? 'Yuborilmoqda...' : 'Yuborish' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
         <div id="ruler-container" class="sd-ruler"></div>
       </div>
 
@@ -935,7 +995,9 @@ if (scrollTestMode.value) {
 }
 
 .sd-toolbar {
-  width: 100%;
+  flex: 1;
+  width: auto;
+  min-width: 0; /* Allow shrinking below content size if needed */
   background: white;
   position: relative;
   z-index: 1;
@@ -997,360 +1059,130 @@ if (scrollTestMode.value) {
   width: 100%;
   height: 100vh;
   position: relative;
+  overflow: hidden; /* Fix scrollbar issues */
 }
 
-.dev-app__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 24px;
-  background-color: #0f172a;
-  color: #e2e8f0;
-  padding: 24px;
-  box-sizing: border-box;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  position: relative;
-  z-index: 120;
-}
-
-.dev-app__header::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 12px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0));
-  pointer-events: none;
-}
-
-.dev-app__brand {
+.dev-app__toolbar-row {
   display: flex;
   align-items: center;
-  gap: 16px;
-  flex: 1 1 auto;
+  border-bottom: 1px solid #e0e0e0;
+  background: white;
+  padding-right: 8px;
 }
 
-.dev-app__logo {
-  width: 64px;
-  height: 64px;
-  border-radius: 14px;
-  overflow: hidden;
-  background: radial-gradient(circle at 30% 30%, #38bdf8, #6366f1);
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-}
-
-.dev-app__logo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 14px;
-}
-
-.dev-app__brand-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.dev-app__pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.18);
-  color: #cbd5e1;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  font-size: 10px;
-  width: fit-content;
-}
-
-.dev-app__meta-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.dev-app__title {
-  margin: 0;
-  color: #f8fafc;
-  font-size: 22px;
-  line-height: 1.2;
-}
-
-.dev-app__subtitle {
-  margin: 0;
-  color: #cbd5e1;
-  font-size: 14px;
-}
-
-.dev-app__header-layout-toggle {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 10px;
-  background: rgba(59, 130, 246, 0.15);
-  border-radius: 10px;
-  font-weight: 700;
-  color: #bfdbfe;
-  letter-spacing: 0.02em;
-  font-size: 12px;
-  pointer-events: none;
-}
-
-.badge--warning {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fcd34d;
-}
-
-.badge--collab {
-  background: rgba(34, 197, 94, 0.2);
-  color: #86efac;
-}
-
-.dev-app__upload-block {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.dev-app__upload-label {
-  color: #cbd5e1;
-  font-size: 13px;
-}
-
-.dev-app__upload-control {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.dev-app__upload-button {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.dev-app__upload-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(59, 130, 246, 0.2);
-  color: #e2e8f0;
-  border: 1px solid rgba(59, 130, 246, 0.35);
-  padding: 8px 14px;
-  border-radius: 10px;
-  font-weight: 700;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease,
-    transform 0.1s ease;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.4);
-}
-
-.dev-app__upload-btn:hover {
-  background: rgba(59, 130, 246, 0.3);
-  border-color: rgba(59, 130, 246, 0.5);
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.5);
-}
-
-.dev-app__upload-input {
-  position: absolute;
-  inset: 0;
-}
-
-:deep(.dev-app__upload-input input[type='file']) {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-  appearance: none;
-  border: none;
-  background: transparent;
-  color: transparent;
-  z-index: 2;
-}
-
-.dev-app__upload-hint {
-  color: #94a3b8;
-  font-size: 12px;
-}
-
-.dev-app__url-control {
+.dev-app__toolbar-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 8px;
+  margin-left: auto; /* Push to right */
+  padding-left: 8px;
+  border-left: 1px solid #eee;
+  height: 40px; /* Match toolbar height */
+  flex-shrink: 0;
+  z-index: 10;
 }
 
-.dev-app__url-input {
-  flex: 1;
-  min-width: 280px;
-  padding: 8px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.6);
-  color: #e2e8f0;
+.dev-app__mini-input {
+  height: 28px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 0 8px;
   font-size: 13px;
+  width: 150px;
 }
 
-.dev-app__url-input::placeholder {
+.dev-app__mini-btn {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dev-app__mini-btn:hover {
+  background: #f5f5f5;
+}
+
+.dev-app__mini-btn--primary {
+  background: #3b82f6;
+  color: white;
+  border: none;
+}
+.dev-app__mini-btn--primary:hover {
+  background: #2563eb;
+}
+
+.dev-app__mini-btn--success {
+  background: #10b981;
+  color: white;
+  border: none;
+}
+.dev-app__mini-btn--success:hover {
+  background: #059669;
+}
+
+
+
+
+.dev-app__more-menu-wrapper {
+  position: relative;
+}
+
+.dev-app__more-btn {
+  padding: 0 8px;
   color: #64748b;
 }
 
-.dev-app__url-input:focus {
-  outline: none;
-  border-color: rgba(59, 130, 246, 0.5);
-  background: rgba(15, 23, 42, 0.8);
-}
-
-.dev-app__url-btn {
-  padding: 8px 14px;
-  border: 1px solid rgba(59, 130, 246, 0.35);
+.dev-app__more-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: white;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
-  background: rgba(59, 130, 246, 0.2);
-  color: #e2e8f0;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
-  white-space: nowrap;
-}
-
-.dev-app__url-btn:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.3);
-  border-color: rgba(59, 130, 246, 0.5);
-}
-
-.dev-app__url-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.dev-app__header-actions {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  padding: 8px;
+  min-width: 250px;
+  z-index: 100;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  align-items: flex-end;
-}
-
-.dev-app__header-upload {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.dev-app__upload-label {
-  color: #cbd5e1;
-  font-size: 14px;
-}
-
-.dev-app__header-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.dev-app__header-export-btn {
-  background: rgba(148, 163, 184, 0.12);
-  color: #e2e8f0;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease,
-    transform 0.1s ease;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
-}
-
-.dev-app__header-export-btn:hover {
-  background: rgba(148, 163, 184, 0.2);
-  border-color: rgba(148, 163, 184, 0.35);
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.28);
-}
-
-.dev-app__header-export-btn:active {
-  transform: translateY(1px);
-  background: rgba(148, 163, 184, 0.28);
-}
-
-.dev-app__dropdown {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-
-.dev-app__dropdown-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.dev-app__dropdown-trigger .caret {
-  display: inline-block;
-  transition: transform 0.15s ease;
-}
-
-.dev-app__dropdown-trigger.is-open .caret {
-  transform: rotate(180deg);
-}
-
-.dev-app__dropdown-menu {
-  position: absolute;
-  top: 105%;
-  right: 0;
-  min-width: 180px;
-  background: #0b1221;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  padding: 6px;
-  z-index: 200;
-  display: grid;
   gap: 4px;
 }
 
-.dev-app__dropdown-item {
-  background: transparent;
-  color: #e2e8f0;
-  border: 1px solid transparent;
-  padding: 8px 10px;
-  border-radius: 8px;
-  text-align: left;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
+.dev-app__menu-row {
+  display: flex;
+  gap: 4px;
 }
 
-.dev-app__dropdown-item:hover {
-  background: rgba(148, 163, 184, 0.12);
-  border-color: rgba(148, 163, 184, 0.25);
+.dev-app__menu-divider {
+  height: 1px;
+  background: #f1f5f9;
+  margin: 4px 0;
+}
+
+.dev-app__menu-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #334155;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+  width: 100%;
+}
+
+.dev-app__menu-item:hover {
+  background: #f8fafc;
 }
 
 .dev-app__main {
