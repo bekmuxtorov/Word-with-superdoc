@@ -55,6 +55,7 @@ const uploadedFileName = ref('');
 const uploadDisplayName = computed(() => uploadedFileName.value || 'No file chosen');
 const isDragging = ref(false);
 const isMoreMenuOpen = ref(false);
+const isInIframe = ref(false);
 
 const handleDragOver = (e) => {
   // Only handle file drags from OS
@@ -79,8 +80,9 @@ const handleDrop = async (e) => {
   }
 };
 
+
 // URL loading
-const documentUrl = ref('');
+const documentUrl = ref('http://localhost:8000/api/files/1/content/');
 const isLoadingUrl = ref(false);
 
 const getToken = () => {
@@ -159,11 +161,19 @@ const handleInsertQRCode = async () => {
 
 const handleLoadFromUrl = async () => {
   const url = documentUrl.value.trim();
-  if (!url) return;
+  console.log('handleLoadFromUrl called with URL:', url);
+  
+  if (!url) {
+    console.warn('No URL provided');
+    return;
+  }
 
   isLoadingUrl.value = true;
   try {
     const token = getToken();
+    console.log('Fetching document from:', url);
+    console.log('Using token:', token ? 'Token exists' : 'No token');
+    
     // Use manual fetch to include authorization header
     const response = await fetch(url, {
       headers: {
@@ -171,15 +181,21 @@ const handleLoadFromUrl = async () => {
       },
     });
 
+    console.log('Response status:', response.status, response.statusText);
+    
     if (!response.ok) {
       throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
     }
 
     const blob = await response.blob();
+    console.log('Blob received, size:', blob.size, 'type:', blob.type);
+    
     // Create a File object from the blob to mimic getFileObject result
     const file = new File([blob], 'document.docx', { type: DOCX });
 
+    console.log('Loading file into editor...');
     await handleNewFile(file);
+    console.log('Document loaded successfully!');
   } catch (err) {
     console.error('Failed to load from URL:', err);
     const message = err instanceof Error ? err.message : String(err);
@@ -353,7 +369,7 @@ const init = async () => {
         // fonts: null,
         // hideButtons: false,
         // responsiveToContainer: true,
-        excludeItems: [], // ['italic', 'bold'],
+        excludeItems: ['ai', 'clearFormatting', 'formatPainter'],
         // texts: {},
       },
       // Test custom slash menu configuration
@@ -728,6 +744,31 @@ const toggleCommentsPanel = () => {
 };
 
 onMounted(async () => {
+  // Listen for postMessage from parent window or iframe
+  window.addEventListener('message', async (event) => {
+    // Security: validate origin if needed
+    // if (event.origin !== 'http://localhost:9094') return;
+    
+    if (event.data && event.data.data) {
+      console.log('Received postMessage:', event.data);
+      isInIframe.value = true;
+      
+      // Set the URL and load the document
+      documentUrl.value = event.data.data;
+      await handleLoadFromUrl();
+      
+      // Send confirmation back to opener/parent
+      const hasOpener = window.opener !== null;
+      const inIframe = window.self !== window.top;
+      
+      if (hasOpener && window.opener) {
+        window.opener.postMessage({ status: 'loaded', url: event.data.data }, '*');
+      } else if (inIframe && window.parent) {
+        window.parent.postMessage({ status: 'loaded', url: event.data.data }, '*');
+      }
+    }
+  });
+
   // Initialize collaboration if enabled via ?collab=1
   if (useCollaboration) {
     const ydoc = new Y.Doc();
@@ -767,16 +808,18 @@ onMounted(async () => {
     // Priority 2: Load by explicit URL param
     documentUrl.value = urlParam;
     await handleLoadFromUrl();
+  } else if (useCollaboration) {
+    // Collaboration mode - just init (provider will sync doc)
+    init();
+  } else if (documentUrl.value) {
+    // Auto-load the default URL if it exists
+    console.log('Auto-loading default URL:', documentUrl.value);
+    await handleLoadFromUrl();
   } else {
-    // Fallback
-    if (useCollaboration) {
-      // If collaboration is active, just init (provider will sync doc)
-      init();
-    } else {
-       // Default blank for non-collab
-       const blankFile = await getFileObject(BlankDOCX, 'test.docx', DOCX);
-       handleNewFile(blankFile);
-    }
+    // Default blank for non-collab
+    console.log('Loading blank document');
+    const blankFile = await getFileObject(BlankDOCX, 'test.docx', DOCX);
+    handleNewFile(blankFile);
   }
 });
 
@@ -918,44 +961,24 @@ if (scrollTestMode.value) {
                 <path d="M3 14h7v7H3z"></path>
               </svg>
             </button>
-            <div class="dev-app__more-menu-wrapper">
-              <button class="dev-app__mini-btn dev-app__more-btn" @click="isMoreMenuOpen = !isMoreMenuOpen">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <circle cx="12" cy="12" r="1" />
-                  <circle cx="12" cy="5" r="1" />
-                  <circle cx="12" cy="19" r="1" />
-                </svg>
-              </button>
-              <div v-if="isMoreMenuOpen" class="dev-app__more-menu">
-                <div class="dev-app__menu-row">
-                  <input
-                    v-model="documentUrl"
-                    type="text"
-                    class="dev-app__mini-input"
-                    placeholder="Load URL..."
-                    @keydown.enter="handleLoadFromUrl"
-                  />
-                  <button class="dev-app__mini-btn" @click="handleLoadFromUrl" :disabled="isLoadingUrl">
-                    Load
-                  </button>
-                </div>
-                <div class="dev-app__menu-divider"></div>
-                <button class="dev-app__menu-item" @click="exportDocx('external')">Saqlash</button>
-                <button class="dev-app__menu-item" @click="handleSendFile" :disabled="isSending">
-                  {{ isSending ? 'Yuborilmoqda...' : 'Yuborish' }}
-                </button>
-              </div>
-            </div>
+            <!-- Save button with icon -->
+            <button class="dev-app__mini-btn" @click="handleSendFile" :disabled="isSending" title="Saqlash">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+              </svg>
+            </button>
           </div>
         </div>
         <div id="ruler-container" class="sd-ruler"></div>
