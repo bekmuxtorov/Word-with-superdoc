@@ -15,6 +15,9 @@ import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
 import * as pdfjsViewer from 'pdfjs-dist/web/pdf_viewer.mjs';
 import { getWorkerSrcFromCDN } from '../../components/PdfViewer/pdf/pdf-adapter.js';
 import SidebarSearch from './sidebar/SidebarSearch.vue';
+import SidebarFieldAnnotations from './sidebar/SidebarFieldAnnotations.vue';
+import { HocuspocusProvider } from '@hocuspocus/provider';
+import * as Y from 'yjs';
 
 // note:
 // Or set worker globally outside the component.
@@ -39,10 +42,32 @@ const testUserEmail = urlParams.get('email') || 'user@superdoc.com';
 const testUserName = urlParams.get('name') || `SuperDoc ${Math.floor(1000 + Math.random() * 9000)}`;
 const userRole = urlParams.get('role') || 'editor';
 const useLayoutEngine = ref(urlParams.get('layout') !== '0');
+const useWebLayout = ref(urlParams.get('view') === 'web');
+const useCollaboration = urlParams.get('collab') === '1';
+
+// Collaboration state
+const ydocRef = shallowRef(null);
+const providerRef = shallowRef(null);
+const collabReady = ref(false);
 const superdocLogo = SuperdocLogo;
 const uploadedFileName = ref('');
 const uploadDisplayName = computed(() => uploadedFileName.value || 'No file chosen');
 const isDragging = ref(false);
+
+const handleDragOver = (e) => {
+  // Only handle file drags from OS
+  if (e.dataTransfer?.types && Array.from(e.dataTransfer.types).includes('Files')) {
+    isDragging.value = true;
+  }
+};
+
+const handleDragLeave = (e) => {
+  // Don't hide if moving to a child element
+  if (e.relatedTarget && e.currentTarget.contains(e.relatedTarget)) {
+    return;
+  }
+  isDragging.value = false;
+};
 
 const handleDrop = async (e) => {
   isDragging.value = false;
@@ -175,19 +200,22 @@ const init = async () => {
   // eslint-disable-next-line no-unused-vars
   const testDocumentId = 'doc123';
 
-  // Prepare document config with content if available
-  const documentConfig = {
-    data: currentFile.value,
-    id: testId,
-    isNewFile: true,
-  };
+  // Prepare document config only if a file was uploaded
+  // If no file, SuperDoc will automatically create a blank document
+  let documentConfig = null;
+  if (currentFile.value) {
+    documentConfig = {
+      data: currentFile.value,
+      id: testId,
+    };
 
-  // Add markdown/HTML content if present
-  if (currentFile.value.markdownContent) {
-    documentConfig.markdown = currentFile.value.markdownContent;
-  }
-  if (currentFile.value.htmlContent) {
-    documentConfig.html = currentFile.value.htmlContent;
+    // Add markdown/HTML content if present
+    if (currentFile.value.markdownContent) {
+      documentConfig.markdown = currentFile.value.markdownContent;
+    }
+    if (currentFile.value.htmlContent) {
+      documentConfig.html = currentFile.value.htmlContent;
+    }
   }
 
   const config = {
@@ -197,6 +225,13 @@ const init = async () => {
     toolbarGroups: ['center'],
     role: userRole,
     documentMode: 'editing',
+    licenseKey: 'public_license_key_superdocinternal_ad7035140c4b',
+    telemetry: {
+      enabled: true,
+      metadata: {
+        source: 'superdoc-dev'
+      }
+    },
     comments: {
       visible: true,
     },
@@ -204,7 +239,10 @@ const init = async () => {
       visible: true,
     },
     toolbarGroups: ['left', 'center', 'right'],
-    pagination: useLayoutEngine.value,
+    pagination: useLayoutEngine.value && !useWebLayout.value,
+    viewOptions: { layout: useWebLayout.value ? 'web' : 'print' },
+    // Web layout mode requires Layout Engine to be OFF (uses ProseMirror's native rendering)
+    useLayoutEngine: useLayoutEngine.value && !useWebLayout.value,
     rulers: true,
     rulerContainer: '#ruler-container',
     annotations: true,
@@ -219,16 +257,15 @@ const init = async () => {
       { name: 'Nick Bernal', email: 'nick@harbourshare.com', access: 'internal' },
       { name: 'Eric Doversberger', email: 'eric@harbourshare.com', access: 'external' },
     ],
-    document: documentConfig,
+    // Only pass document config if a file was uploaded, otherwise SuperDoc creates blank
+    ...(documentConfig ? { document: documentConfig } : {}),
     // documents: [
     //   {
     //     data: currentFile.value,
     //     id: testId,
-    //     isNewFile: true,
     //   },
     // ],
     // cspNonce: 'testnonce123',
-    useLayoutEngine: useLayoutEngine.value,
     modules: {
       comments: {
         // comments: sampleComments,
@@ -357,12 +394,16 @@ const init = async () => {
       },
       // 'hrbr-fields': {},
 
-      // To test this dev env with collaboration you must run a local collaboration server here.
-      // collaboration: {
-      //   url: `ws://localhost:3050/docs/${testDocumentId}`,
-      //   token: 'token',
-      //   providerType: 'hocuspocus',
-      // },
+      // Collaboration - enabled via ?collab=1 URL param
+      // Run `pnpm run collab-server` first, then open http://localhost:5173?collab=1
+      ...(useCollaboration && ydocRef.value && providerRef.value
+        ? {
+            collaboration: {
+              ydoc: ydocRef.value,
+              provider: providerRef.value,
+            },
+          }
+        : {}),
       ai: {
         // Provide your Harbour API key here for direct endpoint access
         // apiKey: 'test',
@@ -374,7 +415,10 @@ const init = async () => {
         pdfViewer: pdfjsViewer,
         setWorker: true,
         workerSrc: getWorkerSrcFromCDN(pdfjsLib.version),
-        textLayerMode: 1,
+        textLayerMode: 0,
+      },
+      whiteboard: {
+        enabled: false,
       },
     },
     onEditorCreate,
@@ -395,6 +439,8 @@ const init = async () => {
   superdoc.value?.on('exception', (error) => {
     console.error('SuperDoc exception:', error);
   });
+
+  window.superdoc = superdoc.value;
 
   // const ydoc = superdoc.value.ydoc;
   // const metaMap = ydoc.getMap('meta');
@@ -589,6 +635,10 @@ const onEditorCreate = ({ editor }) => {
   editor.on('fieldAnnotationSelected', (params) => {
     console.log('fieldAnnotationSelected', { params });
   });
+
+  editor.on('fieldAnnotationDoubleClicked', (params) => {
+    console.log('fieldAnnotationDoubleClicked', { params });
+  });
 };
 
 const handleTitleChange = (e) => {
@@ -610,6 +660,7 @@ const toggleCommentsPanel = () => {
 };
 
 onMounted(async () => {
+<<<<<<< HEAD
   const urlParam = urlParams.get('url');
   const idParam = urlParams.get('id');
 
@@ -626,6 +677,38 @@ onMounted(async () => {
     const blankFile = await getFileObject(BlankDOCX, 'test.docx', DOCX);
     handleNewFile(blankFile);
   }
+=======
+  // Initialize collaboration if enabled via ?collab=1
+  if (useCollaboration) {
+    const ydoc = new Y.Doc();
+    const provider = new HocuspocusProvider({
+      url: 'ws://localhost:3050',
+      name: 'superdoc-dev-room',
+      document: ydoc,
+    });
+
+    ydocRef.value = ydoc;
+    providerRef.value = provider;
+
+    // Wait for sync before loading document
+    await new Promise((resolve) => {
+      provider.on('synced', () => {
+        collabReady.value = true;
+        resolve();
+      });
+      // Fallback timeout in case sync doesn't fire
+      setTimeout(() => {
+        collabReady.value = true;
+        resolve();
+      }, 3000);
+    });
+
+    console.log('[collab] Provider synced, initializing SuperDoc');
+  }
+
+  // Initialize SuperDoc - it will automatically create a blank document
+  init();
+>>>>>>> 70f4ba5c9241c481aa42bf169bed09804eb269aa
 });
 
 onBeforeUnmount(() => {
@@ -633,12 +716,26 @@ onBeforeUnmount(() => {
   superdoc.value?.destroy?.();
   superdoc.value = null;
   activeEditor.value = null;
+
+  // Cleanup collaboration provider
+  if (providerRef.value) {
+    providerRef.value.destroy();
+    providerRef.value = null;
+  }
+  ydocRef.value = null;
 });
 
 const toggleLayoutEngine = () => {
   const nextValue = !useLayoutEngine.value;
   const url = new URL(window.location.href);
   url.searchParams.set('layout', nextValue ? '1' : '0');
+  window.location.href = url.toString();
+};
+
+const toggleViewLayout = () => {
+  const nextValue = !useWebLayout.value;
+  const url = new URL(window.location.href);
+  url.searchParams.set('view', nextValue ? 'web' : 'print');
   window.location.href = url.toString();
 };
 
@@ -657,6 +754,11 @@ const sidebarOptions = [
     id: 'search',
     label: 'Search',
     component: SidebarSearch,
+  },
+  {
+    id: 'fields',
+    label: 'Field Annotations',
+    component: SidebarFieldAnnotations,
   },
 ];
 const activeSidebarId = ref('off');
@@ -708,13 +810,54 @@ if (scrollTestMode.value) {
     class="dev-app"
     :class="{ 'dev-app--scroll-test': scrollTestMode, 'dev-app--dragging': isDragging }"
     @drop.prevent="handleDrop"
-    @dragover.prevent="isDragging = true"
-    @dragleave.prevent="isDragging = false"
+    @dragover.prevent="handleDragOver"
+    @dragleave.prevent="handleDragLeave"
   >
     <div class="dev-app__layout">
       <div class="dev-app__header">
         <div class="dev-app__brand">
+<<<<<<< HEAD
           <h1 class="dev-app__title">SuperDoc Editor</h1>
+=======
+          <div class="dev-app__logo">
+            <img :src="superdocLogo" alt="SuperDoc logo" />
+          </div>
+          <div class="dev-app__brand-meta">
+            <div class="dev-app__meta-row">
+              <span class="dev-app__pill">SUPERDOC LABS</span>
+              <span class="badge">Layout Engine: {{ useLayoutEngine && !useWebLayout ? 'ON' : 'OFF' }}</span>
+              <span v-if="useWebLayout" class="badge">Web Layout: ON</span>
+              <span v-if="scrollTestMode" class="badge badge--warning">Scroll Test: ON</span>
+              <span v-if="useCollaboration" class="badge badge--collab">Collab: ON</span>
+            </div>
+            <h2 class="dev-app__title">SuperDoc Dev</h2>
+            <div class="dev-app__header-layout-toggle">
+              <div class="dev-app__upload-control">
+                <div class="dev-app__upload-button">
+                  <span class="dev-app__upload-btn">Upload file</span>
+                  <BasicUpload class="dev-app__upload-input" @file-change="handleNewFile" />
+                </div>
+                <span class="dev-app__upload-filename">{{ uploadDisplayName }}</span>
+              </div>
+              <div class="dev-app__url-control">
+                <input
+                  v-model="documentUrl"
+                  type="text"
+                  class="dev-app__url-input"
+                  placeholder="Paste document URL..."
+                  @keydown.enter="handleLoadFromUrl"
+                />
+                <button
+                  class="dev-app__url-btn"
+                  :disabled="isLoadingUrl || !documentUrl.trim()"
+                  @click="handleLoadFromUrl"
+                >
+                  {{ isLoadingUrl ? 'Loading...' : 'Load URL' }}
+                </button>
+              </div>
+            </div>
+          </div>
+>>>>>>> 70f4ba5c9241c481aa42bf169bed09804eb269aa
         </div>
         <div class="dev-app__header-actions">
           <div class="dev-app__url-control">
@@ -727,6 +870,9 @@ if (scrollTestMode.value) {
             />
             <button class="dev-app__url-btn" @click="handleLoadFromUrl" :disabled="isLoadingUrl">
               {{ isLoadingUrl ? 'Loading...' : 'Load URL' }}
+            </button>
+            <button class="dev-app__header-export-btn" @click="toggleViewLayout">
+              Turn Web Layout {{ useWebLayout ? 'off' : 'on' }} (reloads)
             </button>
           </div>
           <button class="dev-app__header-export-btn" @click="exportDocx('external')">Saqlash</button>
@@ -759,8 +905,8 @@ if (scrollTestMode.value) {
 
       <div class="dev-app__main">
         <div class="dev-app__view">
-          <div class="dev-app__content" v-if="currentFile">
-            <div class="dev-app__content-container">
+          <div class="dev-app__content">
+            <div class="dev-app__content-container" :class="{ 'dev-app__content-container--web-layout': useWebLayout }">
               <div id="superdoc"></div>
             </div>
           </div>
@@ -966,6 +1112,11 @@ if (scrollTestMode.value) {
 .badge--warning {
   background: rgba(251, 191, 36, 0.2);
   color: #fcd34d;
+}
+
+.badge--collab {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
 }
 
 .dev-app__upload-block {
@@ -1247,6 +1398,28 @@ if (scrollTestMode.value) {
   width: auto;
 }
 
+/* Web layout mode: dev app container styling */
+.dev-app__content-container--web-layout {
+  width: 100%;
+  max-width: 100%;
+  padding: 0 16px;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+/* Web layout mode: prevent centering to allow full-width layout */
+.dev-app__content:has(.dev-app__content-container--web-layout) {
+  align-items: stretch;
+}
+
+.dev-app__view:has(.dev-app__content-container--web-layout) {
+  width: 100%;
+}
+
+.dev-app__main:has(.dev-app__content-container--web-layout) {
+  overflow-x: hidden;
+}
+
 .dev-app__inputs-panel {
   display: grid;
   height: calc(100vh - var(--header-height) - var(--toolbar-height));
@@ -1305,5 +1478,81 @@ if (scrollTestMode.value) {
   font-size: 14px;
   line-height: 1.5;
   color: #fde68a;
+}
+
+/* Mobile responsive styles */
+@media screen and (max-width: 768px) {
+  .dev-app {
+    --header-height: auto;
+    overflow-x: hidden;
+  }
+
+  .dev-app__layout {
+    overflow-x: hidden;
+  }
+
+  .dev-app__header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .dev-app__brand {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .dev-app__logo {
+    width: 48px;
+    height: 48px;
+  }
+
+  .dev-app__title {
+    font-size: 18px;
+  }
+
+  .dev-app__meta-row {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .dev-app__header-actions {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .dev-app__header-buttons {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .dev-app__header-export-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .dev-app__upload-control {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dev-app__url-form {
+    flex-direction: column;
+  }
+
+  .dev-app__url-input {
+    width: 100%;
+  }
+
+  .dev-app__main {
+    overflow-x: hidden;
+  }
+
+  .dev-app__view {
+    padding-top: 10px;
+    overflow-x: hidden;
+  }
 }
 </style>

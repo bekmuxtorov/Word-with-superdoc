@@ -335,10 +335,23 @@ export const CommentsPlugin = Extension.create({
 
           if (type === 'setActiveComment') {
             shouldUpdate = true;
-            pluginState.activeThreadId = meta.activeThreadId; // Update the outer scope variable
+            const previousActiveThreadId = pluginState.activeThreadId;
+            const newActiveThreadId = meta.activeThreadId;
+
+            // Emit commentsUpdate event when active comment changes (e.g., from comment bubble click)
+            // Defer emission to after transaction completes to avoid dispatching during apply()
+            if (previousActiveThreadId !== newActiveThreadId) {
+              const update = {
+                type: comments_module_events.SELECTED,
+                activeCommentId: newActiveThreadId ? newActiveThreadId : null,
+              };
+              setTimeout(() => editor.emit('commentsUpdate', update), 0);
+            }
+
+            pluginState.activeThreadId = newActiveThreadId;
             return {
               ...pluginState,
-              activeThreadId: meta.activeThreadId,
+              activeThreadId: newActiveThreadId,
               changedActiveThread: true,
             };
           }
@@ -411,6 +424,7 @@ export const CommentsPlugin = Extension.create({
             const { doc, tr } = state;
             const pluginState = CommentsPluginKey.getState(state);
             const currentActiveThreadId = pluginState.activeThreadId;
+            const layoutEngineActive = Boolean(editor.presentationEditor);
 
             const meta = tr.getMeta(CommentsPluginKey);
             if (meta?.type === 'setActiveComment' || meta?.forceUpdate) {
@@ -433,6 +447,10 @@ export const CommentsPlugin = Extension.create({
             if (!shouldUpdate) return;
             prevDoc = doc;
             shouldUpdate = false;
+
+            if (layoutEngineActive) {
+              return;
+            }
 
             const decorations = [];
             // Always rebuild positions fresh from the current document to avoid stale PM offsets
@@ -614,67 +632,67 @@ const getActiveCommentId = (doc, selection) => {
   const nodeAtPos = doc.nodeAt($from.pos);
   if (!nodeAtPos) return;
 
-  // If we have a tracked change, we can return it right away
+  // Check for tracked change mark (we'll use this as fallback if no comment found)
   const trackedChangeMark = findTrackedMark({
     doc,
     from: $from.pos,
     to: $to.pos,
   });
 
-  if (trackedChangeMark) {
-    return trackedChangeMark.mark.attrs.id;
-  }
+  // Check for comment nodes first - comments take precedence over tracked changes
+  // This ensures that when cursor is on text that has both TC and comment, the comment is selected
+  // Collect all comment marks at the cursor position along with their ranges
+  const commentRanges = new Map(); // commentId -> { start, end }
 
-  // Otherwise, we need to check for comment nodes
-  const overlaps = [];
-  let found = false;
-
-  // Look for commentRangeStart nodes before the current position
-  // There could be overlapping comments so we need to track all of them
+  // First pass: find all comment ranges in the document
   doc.descendants((node, pos) => {
-    if (found) return;
-
-    // node goes from `pos` to `end = pos + node.nodeSize`
-    const end = pos + node.nodeSize;
-
-    // If $from.pos is outside this node’s range, skip it
-    if ($from.pos < pos || $from.pos >= end) {
-      return;
-    }
-
-    // Now we know $from.pos is within this node’s start/end
     const { marks = [] } = node;
-    const commentMark = marks.find((mark) => mark.type.name === CommentMarkName);
-    if (commentMark) {
-      overlaps.push({
-        node,
-        pos,
-        size: node.nodeSize,
+    const commentMarks = marks.filter((mark) => mark.type.name === CommentMarkName);
+
+    commentMarks.forEach((mark) => {
+      const commentId = mark.attrs.commentId || mark.attrs.importedId;
+      if (!commentId) return;
+
+      const existing = commentRanges.get(commentId);
+      const end = pos + node.nodeSize;
+
+      if (!existing) {
+        commentRanges.set(commentId, { start: pos, end });
+      } else {
+        // Extend the range if this node extends it
+        commentRanges.set(commentId, {
+          start: Math.min(existing.start, pos),
+          end: Math.max(existing.end, end),
+        });
+      }
+    });
+  });
+
+  // Find which comments contain the cursor position
+  const containingComments = [];
+  commentRanges.forEach((range, commentId) => {
+    if ($from.pos >= range.start && $from.pos < range.end) {
+      containingComments.push({
+        commentId,
+        start: range.start,
+        end: range.end,
+        size: range.end - range.start,
       });
     }
-
-    // If we've passed the position, we can stop
-    if (pos > $from.pos) {
-      found = true;
-    }
   });
 
-  // Get the closest commentRangeStart node to the current position
-  let closest = null;
-  let closestCommentRangeStart = null;
-  overlaps.forEach(({ pos, node }) => {
-    if (!closest) closest = $from.pos - pos;
-
-    const diff = $from.pos - pos;
-    if (diff >= 0 && diff <= closest) {
-      closestCommentRangeStart = node;
-      closest = diff;
+  if (containingComments.length === 0) {
+    // No comments found, fall back to tracked change if present
+    if (trackedChangeMark) {
+      return trackedChangeMark.mark.attrs.id;
     }
-  });
+    return null;
+  }
 
-  const { marks: closestMarks = [] } = closestCommentRangeStart || {};
-  const closestCommentMark = closestMarks.find((mark) => mark.type.name === CommentMarkName);
-  return closestCommentMark?.attrs?.commentId || closestCommentMark?.attrs?.importedId;
+  // Return the innermost comment (smallest range)
+  // For nested comments, the inner one has the smallest size
+  containingComments.sort((a, b) => a.size - b.size);
+  return containingComments[0].commentId;
 };
 
 const findTrackedMark = ({
@@ -708,7 +726,7 @@ const findTrackedMark = ({
 };
 
 const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEditorState, editor) => {
-  const { insertedMark, deletionMark, formatMark, deletionNodes } = trackedChangeMeta;
+  const { insertedMark, deletionMark, formatMark, deletionNodes, emitCommentEvent = true } = trackedChangeMeta;
 
   if (!insertedMark && !deletionMark && !formatMark) {
     return;
@@ -759,7 +777,7 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
     newEditorState,
   });
 
-  if (emitParams) editor.emit('commentsUpdate', emitParams);
+  if (emitParams && emitCommentEvent) editor.emit('commentsUpdate', emitParams);
 
   return newTrackedChanges;
 };
@@ -850,11 +868,22 @@ const createOrUpdateTrackedChangeComment = ({ event, marks, deletionNodes, nodes
   // When isDeletionInsertion is true, nodesWithMark should contain both types
   let nodesToUse;
   if (isDeletionInsertion) {
-    // For replacements, use nodes found in document (which should include both insertion and deletion)
-    // Also include nodes from step.slice and deletionNodes if they exist (for newly created replacements)
-    const allNodes = [...nodesWithMark, ...nodes, ...(deletionNodes || [])];
-    // Remove duplicates by comparing node identity
-    nodesToUse = Array.from(new Set(allNodes));
+    // For replacements, prefer nodes found in the document to avoid duplicating text
+    // when step.slice/deletionNodes include overlapping content.
+    const hasInsertNode = nodesWithMark.some((node) =>
+      node.marks.find((nodeMark) => nodeMark.type.name === TrackInsertMarkName),
+    );
+    const hasDeleteNode = nodesWithMark.some((node) =>
+      node.marks.find((nodeMark) => nodeMark.type.name === TrackDeleteMarkName),
+    );
+
+    const fallbackNodes = [
+      ...(!hasInsertNode && nodes?.length ? nodes : []),
+      ...(!hasDeleteNode && deletionNodes?.length ? deletionNodes : []),
+    ];
+    // safety net for identity dedupe
+    // work is done above
+    nodesToUse = Array.from(new Set([...nodesWithMark, ...fallbackNodes]));
   } else {
     // For non-replacements, use nodes found in document or fall back to step nodes
     nodesToUse = nodesWithMark.length ? nodesWithMark : node ? [node] : [];

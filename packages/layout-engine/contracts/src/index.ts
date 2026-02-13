@@ -56,12 +56,15 @@ export type FieldAnnotationMetadata = {
   marks?: Record<string, unknown>;
 };
 
+export type StructuredContentLockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked';
+
 export type StructuredContentMetadata = {
   type: 'structuredContent';
   scope: 'inline' | 'block';
   id?: string | null;
   tag?: string | null;
   alias?: string | null;
+  lockMode?: StructuredContentLockMode;
   sdtPr?: unknown;
 };
 
@@ -162,7 +165,7 @@ export type RunMarks = {
     style?: 'single' | 'double' | 'dotted' | 'dashed' | 'wavy';
     /** Underline color as hex string (defaults to text color). */
     color?: string;
-  };
+  } | null;
   /** Strikethrough text decoration. */
   strike?: boolean;
   /** Highlight (background) color as hex string. */
@@ -216,6 +219,8 @@ export type TabRun = RunMarks & {
   indent?: ParagraphIndent;
   pmStart?: number;
   pmEnd?: number;
+  /** SDT metadata if tab is inside a structured document tag. */
+  sdt?: SdtMetadata;
 };
 
 export type LineBreakRun = {
@@ -529,6 +534,8 @@ export type ImageBlock = {
   margin?: BoxSpacing;
   anchor?: ImageAnchor;
   wrap?: ImageWrap;
+  /** Stacking order from OOXML relativeHeight (same formula as editor: Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE)) */
+  zIndex?: number;
   attrs?: ImageBlockAttrs;
   // VML image adjustments for watermark effects
   gain?: string | number; // Brightness/washout (VML hex string or number)
@@ -946,6 +953,7 @@ export type ParagraphSpacing = {
   before?: number;
   after?: number;
   line?: number;
+  lineUnit?: 'px' | 'multiplier';
   lineRule?: 'auto' | 'exact' | 'atLeast';
   beforeAutospacing?: boolean;
   afterAutospacing?: boolean;
@@ -1170,7 +1178,7 @@ export type WordLayoutConfig = {
 
 export type ParagraphAttrs = {
   styleId?: string;
-  alignment?: 'left' | 'center' | 'right' | 'justify' | 'both';
+  alignment?: 'left' | 'center' | 'right' | 'justify';
   spacing?: ParagraphSpacing;
   /**
    * Indicates which spacing properties were explicitly set on the paragraph.
@@ -1197,7 +1205,7 @@ export type ParagraphAttrs = {
    */
   dropCapDescriptor?: DropCapDescriptor;
   frame?: ParagraphFrame;
-  numberingProperties?: Record<string, unknown>;
+  numberingProperties?: { ilvl?: number; numId?: number } | null;
   borders?: ParagraphBorders;
   shading?: ParagraphShading;
   tabs?: TabStop[];
@@ -1205,6 +1213,7 @@ export type ParagraphAttrs = {
   tabIntervalTwips?: number;
   keepNext?: boolean;
   keepLines?: boolean;
+  pageBreakBefore?: boolean;
   trackedChangesMode?: TrackedChangesMode;
   trackedChangesEnabled?: boolean;
   /** Marks an empty paragraph that only exists to carry section properties. */
@@ -1585,6 +1594,7 @@ export type ImageFragment = {
   width: number;
   height: number;
   isAnchored?: boolean;
+  behindDoc?: boolean;
   zIndex?: number;
   pmStart?: number;
   pmEnd?: number;
@@ -1600,6 +1610,7 @@ export type DrawingFragment = {
   width: number;
   height: number;
   isAnchored?: boolean;
+  behindDoc?: boolean;
   zIndex?: number;
   geometry: DrawingGeometry;
   scale: number;

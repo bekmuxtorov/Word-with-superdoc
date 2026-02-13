@@ -25,13 +25,16 @@ export default defineConfig(({ mode }) => {
       minWorkers,
       maxWorkers,
       globals: true,
-      environment: 'jsdom',
+      // Use happy-dom for faster tests (set VITEST_DOM=jsdom to use jsdom)
+      environment: process.env.VITEST_DOM || 'happy-dom',
       retry: 2,
       testTimeout: 20000,
       hookTimeout: 10000,
       exclude: [
         ...configDefaults.exclude,
         '**/*.spec.js',
+        // Slow test excluded by default, run with VITEST_SLOW=1 (test:slow script)
+        ...(process.env.VITEST_SLOW ? [] : ['**/node-import-timing.test.js']),
       ],
       coverage: {
         provider: 'v8',

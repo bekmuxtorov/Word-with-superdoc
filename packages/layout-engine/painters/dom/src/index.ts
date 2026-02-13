@@ -116,6 +116,9 @@ export const createDomPainter = (
 ): PainterDOM & {
   setProviders?: (header?: PageDecorationProvider, footer?: PageDecorationProvider) => void;
   setVirtualizationPins?: (pageIndices: number[] | null | undefined) => void;
+  setActiveComment?: (commentId: string | null) => void;
+  getActiveComment?: () => string | null;
+  onScroll?: () => void;
 } => {
   const painter = new DomPainter(options.blocks, options.measures, {
     pageStyles: options.pageStyles,
@@ -147,6 +150,16 @@ export const createDomPainter = (
     },
     setVirtualizationPins(pageIndices: number[] | null | undefined) {
       painter.setVirtualizationPins(pageIndices);
+    },
+    setActiveComment(commentId: string | null) {
+      painter.setActiveComment(commentId);
+    },
+    getActiveComment() {
+      return painter.getActiveComment();
+    },
+    // Trigger virtualization update when scroll container is external to the painter
+    onScroll() {
+      painter.onScroll();
     },
   };
 };

@@ -55,6 +55,27 @@ export interface DocxFileEntry {
 }
 
 /**
+ * Document view layout values - mirrors OOXML ST_View (ECMA-376 §17.18.102)
+ * - 'print': Print Layout View - displays document as it prints (default)
+ * - 'web': Web Page View - content reflows to fit container (mobile/accessibility)
+ */
+export type ViewLayout = 'print' | 'web';
+
+/**
+ * Document view options for controlling how the document is displayed.
+ * Mirrors OOXML document view settings.
+ */
+export interface ViewOptions {
+  /**
+   * Document view layout (OOXML ST_View compatible)
+   * - 'print': Fixed page width, displays document as it prints (default)
+   * - 'web': Content reflows to fit container width
+   * @default 'print'
+   */
+  layout?: ViewLayout;
+}
+
+/**
  * Awareness interface - matches y-protocols Awareness.
  * All properties optional to support various provider implementations.
  */
@@ -228,6 +249,13 @@ export interface EditorOptions {
   /** Editor scale/zoom */
   scale?: number;
 
+  /**
+   * Document view options (OOXML ST_View compatible).
+   * Controls how the document is displayed.
+   * @example { layout: 'web' } // Content reflows to fit container
+   */
+  viewOptions?: ViewOptions | null;
+
   /** Whether annotations are enabled */
   annotations?: boolean;
 
@@ -387,4 +415,26 @@ export interface EditorOptions {
    * The static Editor.open() factory sets this automatically.
    */
   deferDocumentLoad?: boolean;
+
+  /**
+   * License key for billing and telemetry authentication.
+   */
+  licenseKey?: string | null;
+
+  /**
+   * Telemetry configuration for tracking document opens.
+   * When enabled, sends document open events for usage-based billing.
+   */
+  telemetry?: {
+    /** Whether telemetry is enabled */
+    enabled: boolean;
+    /** Custom telemetry endpoint (optional) */
+    endpoint?: string;
+    /** Custom metadata to include with telemetry events (optional) */
+    metadata?: Record<string, unknown>;
+    /**
+     * @deprecated Use root-level `licenseKey` instead. If both are provided, root-level has priority.
+     */
+    licenseKey?: string | null;
+  } | null;
 }

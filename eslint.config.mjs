@@ -12,6 +12,7 @@ export default [
   {
     ignores: [
       '**/dist/**',
+      '**/dist-types/**',
       '**/node_modules/**',
       // Generated/vendor files that shouldn't be linted
       '**/pdfjs.js',
@@ -29,8 +30,8 @@ export default [
       '**/*.spec.js',
       '**/tests/**',
       '**/test/**',
-      // Docs generated files
-      'docs/.vitepress/cache/**',
+      // Docs (Mintlify site with its own conventions)
+      'apps/docs/**',
       // Examples (different environments and coding styles)
       'examples/**',
       '**/examples/**',
@@ -133,6 +134,9 @@ export default [
           // Temporarily all "@"-prefixed imports. This should likely be changed to use https://github.com/pzmosquito/eslint-import-resolver-vite to properly resolve these aliases
           ignore: [
             '^@.*$',
+            '^bun:.*$', // Bun built-in modules
+            '^superdoc$',
+            '^superdoc/style\\.css$',
           ],
         }
       ]

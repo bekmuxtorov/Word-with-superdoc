@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref, reactive, computed } from 'vue';
+import { ref, reactive, computed, watch } from 'vue';
 import { comments_module_events } from '@superdoc/common';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
 import { syncCommentsToClients } from '../core/collaboration/helpers.js';
@@ -93,6 +93,22 @@ export const useCommentsStore = defineStore('comments', () => {
     return getComment(comment.parentCommentId);
   };
 
+  const isRangeThreadedComment = (comment) => {
+    if (!comment) return false;
+    return (
+      comment.threadingStyleOverride === 'range-based' ||
+      comment.threadingMethod === 'range-based' ||
+      comment.originalXmlStructure?.hasCommentsExtended === false
+    );
+  };
+
+  const shouldThreadWithTrackedChange = (comment) => {
+    if (!comment?.trackedChangeParentId) return false;
+    if (!isRangeThreadedComment(comment)) return false;
+    const trackedChange = getComment(comment.trackedChangeParentId);
+    return Boolean(trackedChange?.trackedChange);
+  };
+
   /**
    * Extract the position lookup key from a comment or comment ID.
    * Prefers importedId for imported comments since editor marks retain the original ID.
@@ -107,6 +123,72 @@ export const useCommentsStore = defineStore('comments', () => {
     }
     return commentOrId;
   };
+
+  const clearResolvedMetadata = (comment) => {
+    if (!comment) return;
+    // Sets the resolved state to null so it can be restored in the comments sidebar
+    comment.resolvedTime = null;
+    comment.resolvedByEmail = null;
+    comment.resolvedByName = null;
+  };
+
+  /**
+   * Check if a comment originated from the super-editor (or has no explicit source).
+   * Comments without a source are assumed to be editor-backed for backward compatibility.
+   *
+   * @param {Object} comment - The comment to check
+   * @returns {boolean} True if the comment is editor-backed
+   */
+  const isEditorBackedComment = (comment) => {
+    const source = comment?.selection?.source;
+    if (source == null) return true;
+    return source === 'super-editor';
+  };
+
+  /**
+   * Check if a comment is part of a tracked-change thread.
+   * Returns true for tracked-change comments or replies to tracked changes.
+   *
+   * @param {Object} comment - The comment to check
+   * @returns {boolean} True if the comment is a tracked-change thread
+   */
+  const isTrackedChangeThread = (comment) => Boolean(comment?.trackedChange) || Boolean(comment?.trackedChangeParentId);
+
+  const syncResolvedCommentsWithDocument = () => {
+    const docPositions = editorCommentPositions.value || {};
+    const activeKeys = new Set(Object.keys(docPositions));
+    if (!activeKeys.size) return;
+
+    commentsList.value.forEach((comment) => {
+      const key = getCommentPositionKey(comment);
+      if (!key) return;
+
+      const hasActiveAnchor = activeKeys.has(String(key));
+      if (
+        hasActiveAnchor &&
+        comment.resolvedTime &&
+        isEditorBackedComment(comment) &&
+        !isTrackedChangeThread(comment)
+      ) {
+        clearResolvedMetadata(comment);
+      }
+    });
+  };
+
+  /* The watchers below are used to sync the resolved state of comments with the document.
+   *  This is especially useful for undo/redo operations that are not handled by the editor.
+   */
+  watch(editorCommentPositions, () => {
+    syncResolvedCommentsWithDocument();
+  });
+
+  watch(
+    commentsList,
+    () => {
+      syncResolvedCommentsWithDocument();
+    },
+    { deep: false },
+  );
 
   /**
    * Normalize a position object to a consistent { start, end } format.
@@ -187,7 +269,8 @@ export const useCommentsStore = defineStore('comments', () => {
     if (!isViewingMode.value) return true;
     const parent = getThreadParent(comment);
     if (!parent && comment?.parentCommentId) return false;
-    const isTrackedChange = Boolean(parent?.trackedChange);
+    // Check both parent's trackedChange flag and comment's trackedChangeParentId
+    const isTrackedChange = Boolean(parent?.trackedChange) || Boolean(comment?.trackedChangeParentId);
     return isTrackedChange ? viewingVisibility.trackChangesVisible : viewingVisibility.commentsVisible;
   };
 
@@ -389,22 +472,24 @@ export const useCommentsStore = defineStore('comments', () => {
 
     commentsList.value.forEach((comment) => {
       if (!isThreadVisible(comment)) return;
+      const trackedChangeParentId = shouldThreadWithTrackedChange(comment) ? comment.trackedChangeParentId : null;
+      const parentId = comment.parentCommentId || trackedChangeParentId;
       // Track resolved comments
       if (comment.resolvedTime) {
         resolvedComments.push(comment);
       }
 
       // Track parent comments
-      else if (!comment.parentCommentId && !comment.resolvedTime) {
+      else if (!parentId && !comment.resolvedTime) {
         parentComments.push({ ...comment });
       }
 
       // Track child comments (threaded comments)
-      else if (comment.parentCommentId) {
-        if (!childCommentMap.has(comment.parentCommentId)) {
-          childCommentMap.set(comment.parentCommentId, []);
+      else if (parentId) {
+        if (!childCommentMap.has(parentId)) {
+          childCommentMap.set(parentId, []);
         }
-        childCommentMap.get(comment.parentCommentId).push(comment);
+        childCommentMap.get(parentId).push(comment);
       }
     });
 
@@ -550,6 +635,9 @@ export const useCommentsStore = defineStore('comments', () => {
   const deleteComment = ({ commentId: commentIdToDelete, superdoc }) => {
     const commentIndex = commentsList.value.findIndex((c) => c.commentId === commentIdToDelete);
     const comment = commentsList.value[commentIndex];
+    if (!comment) {
+      return;
+    }
     const { commentId, importedId } = comment;
     const { fileId } = comment;
 
@@ -601,7 +689,8 @@ export const useCommentsStore = defineStore('comments', () => {
     }
 
     comments.forEach((comment) => {
-      const htmlContent = getHtmlFromComment(comment.textJson);
+      const textElements = Array.isArray(comment.elements) ? comment.elements : [];
+      const htmlContent = getHtmlFromComment(textElements);
 
       if (!htmlContent && !comment.trackedChange) {
         return;
@@ -612,10 +701,11 @@ export const useCommentsStore = defineStore('comments', () => {
       const newComment = useComment({
         fileId: documentId,
         fileType: document.type,
-        docxCommentJSON: comment.textJson,
+        docxCommentJSON: textElements.length ? textElements : null,
         commentId: comment.commentId,
         isInternal: false,
         parentCommentId: comment.parentCommentId,
+        trackedChangeParentId: comment.trackedChangeParentId,
         creatorName,
         createdTime: comment.createdTime,
         creatorEmail: comment.creatorEmail,
@@ -623,7 +713,7 @@ export const useCommentsStore = defineStore('comments', () => {
           name: importedName,
           email: comment.creatorEmail,
         },
-        commentText: getHtmlFromComment(comment.textJson),
+        commentText: htmlContent,
         resolvedTime: comment.isDone ? Date.now() : null,
         resolvedByEmail: comment.isDone ? comment.creatorEmail : null,
         resolvedByName: comment.isDone ? importedName : null,
@@ -691,6 +781,12 @@ export const useCommentsStore = defineStore('comments', () => {
     });
   };
 
+  const normalizeDocxSchemaForExport = (value) => {
+    if (!value) return [];
+    const nodes = Array.isArray(value) ? value : [value];
+    return nodes.filter(Boolean);
+  };
+
   const translateCommentsForExport = () => {
     const processedComments = [];
     commentsList.value.forEach((comment) => {
@@ -699,7 +795,8 @@ export const useCommentsStore = defineStore('comments', () => {
       // If this comment originated from DOCX (Word or Google Docs), prefer the
       // original DOCX-schema JSON captured at import time. Otherwise, fall back
       // to rebuilding commentJSON from the rich-text HTML.
-      const schema = values.docxCommentJSON || convertHtmlToSchema(richText);
+      const docxSchema = normalizeDocxSchemaForExport(values.docxCommentJSON);
+      const schema = docxSchema.length ? docxSchema : convertHtmlToSchema(richText);
       processedComments.push({
         ...values,
         commentJSON: schema,
@@ -715,7 +812,8 @@ export const useCommentsStore = defineStore('comments', () => {
       content: commentHTML,
       extensions: getRichTextExtensions(),
     });
-    return editor.getJSON().content[0];
+    const json = editor.getJSON();
+    return Array.isArray(json?.content) ? json.content.filter(Boolean) : [];
   };
 
   /**
@@ -726,6 +824,9 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {void}
    */
   const handleEditorLocationsUpdate = (allCommentPositions) => {
+    if ((!allCommentPositions || Object.keys(allCommentPositions).length === 0) && commentsList.value.length > 0) {
+      return;
+    }
     editorCommentPositions.value = allCommentPositions || {};
   };
 
@@ -768,15 +869,36 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {string} The HTML content
    */
   const normalizeCommentForEditor = (node) => {
+    if (Array.isArray(node)) {
+      return node
+        .map((child) => normalizeCommentForEditor(child))
+        .flat()
+        .filter(Boolean);
+    }
+
     if (!node || typeof node !== 'object') return node;
 
+    const stripTextStyleAttrs = (attrs) => {
+      if (!attrs) return attrs;
+      const rest = { ...attrs };
+      delete rest.fontSize;
+      delete rest.fontFamily;
+      delete rest.eastAsiaFontFamily;
+      return Object.keys(rest).length ? rest : undefined;
+    };
+
+    const normalizeMark = (mark) => {
+      if (!mark) return mark;
+      const typeName = typeof mark.type === 'string' ? mark.type : mark.type?.name;
+      const attrs = mark?.attrs ? { ...mark.attrs } : undefined;
+      if (typeName === 'textStyle' && attrs) {
+        return { ...mark, attrs: stripTextStyleAttrs(attrs) };
+      }
+      return { ...mark, attrs };
+    };
+
     const cloneMarks = (marks) =>
-      Array.isArray(marks)
-        ? marks.filter(Boolean).map((mark) => ({
-            ...mark,
-            attrs: mark?.attrs ? { ...mark.attrs } : undefined,
-          }))
-        : undefined;
+      Array.isArray(marks) ? marks.filter(Boolean).map((mark) => normalizeMark(mark)) : undefined;
 
     const cloneAttrs = (attrs) => (attrs && typeof attrs === 'object' ? { ...attrs } : undefined);
 
@@ -806,18 +928,31 @@ export const useCommentsStore = defineStore('comments', () => {
     };
   };
 
-  const getHtmlFromComment = (commentTextJson) => {
+  const getHtmlFromComment = (commentTextElements) => {
     // If no content, we can't convert and its not a valid comment
-    if (!commentTextJson.content?.length) return;
+    const elementsArray = Array.isArray(commentTextElements)
+      ? commentTextElements
+      : commentTextElements
+        ? [commentTextElements]
+        : [];
+    const hasContent = elementsArray.some((element) => element?.content?.length);
+    if (!hasContent) return;
 
     try {
-      const normalizedContent = normalizeCommentForEditor(commentTextJson);
-      const schemaContent = Array.isArray(normalizedContent) ? normalizedContent[0] : normalizedContent;
-      if (!schemaContent.content.length) return null;
+      const normalizedContent = normalizeCommentForEditor(elementsArray);
+      const contentArray = Array.isArray(normalizedContent)
+        ? normalizedContent
+        : normalizedContent
+          ? [normalizedContent]
+          : [];
+      if (!contentArray.length) return null;
       const editor = new Editor({
         mode: 'text',
         isHeadless: true,
-        content: schemaContent,
+        content: {
+          type: 'doc',
+          content: contentArray,
+        },
         loadFromSchema: true,
         extensions: getRichTextExtensions(),
       });

@@ -52,9 +52,19 @@ import { buildSchemaSummary } from './schema-summary.js';
 import { PresentationEditor } from './presentation-editor/index.js';
 import type { EditorRenderer } from './renderers/EditorRenderer.js';
 import { ProseMirrorRenderer } from './renderers/ProseMirrorRenderer.js';
+import { BLANK_DOCX_DATA_URI } from './blank-docx.js';
+import { getArrayBufferFromUrl } from '@core/super-converter/helpers.js';
+import { Telemetry, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
 
 declare const __APP_VERSION__: string;
 declare const version: string | undefined;
+
+/**
+ * Constants for layout calculations
+ */
+const PIXELS_PER_INCH = 96;
+const MAX_HEIGHT_BUFFER_PX = 50;
+const MAX_WIDTH_BUFFER_PX = 20;
 
 /**
  * Image storage structure used by the image extension
@@ -129,6 +139,9 @@ export interface SaveOptions {
 
   /** Highlight color for fields */
   fieldsHighlightColor?: string | null;
+
+  /** ZIP compression method for docx export. Defaults to 'DEFLATE'. Use 'STORE' for faster exports without compression. */
+  compression?: 'DEFLATE' | 'STORE';
 }
 
 /**
@@ -231,6 +244,16 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   setHighContrastMode?: (enabled: boolean) => void;
 
+  /**
+   * Telemetry instance for tracking document opens
+   */
+  #telemetry: Telemetry | null = null;
+
+  /**
+   * Guard flag to prevent double-tracking document open
+   */
+  #documentOpenTracked = false;
+
   options: EditorOptions = {
     element: null,
     selector: null,
@@ -261,6 +284,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     isCommentsEnabled: false,
     isNewFile: false,
     scale: 1,
+    viewOptions: { layout: 'print' },
     annotations: false,
     isInternal: false,
     externalExtensions: [],
@@ -314,6 +338,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     // header/footer editors may have parent(main) editor set
     parentEditor: null,
+
+    // License key (resolved in #initTelemetry; undefined means "not explicitly set")
+    licenseKey: undefined,
+
+    // Telemetry configuration
+    telemetry: { enabled: true },
   };
 
   /**
@@ -380,6 +410,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.#checkHeadless(resolvedOptions);
     this.setOptions(resolvedOptions);
     this.#renderer = resolvedOptions.renderer ?? (domAvailable ? new ProseMirrorRenderer() : null);
+    this.#initTelemetry();
 
     const { setHighContrastMode } = useHighContrastMode();
     this.setHighContrastMode = setHighContrastMode;
@@ -441,6 +472,61 @@ export class Editor extends EventEmitter<EditorEventMap> {
       if (this.isDestroyed) return;
       this.emit('create', { editor: this });
     }, 0);
+
+    // Generate metadata and track telemetry (non-blocking)
+    this.#trackDocumentOpen();
+  }
+
+  /**
+   * Initialize telemetry if configured
+   */
+  #initTelemetry(): void {
+    const { telemetry: telemetryConfig, licenseKey } = this.options;
+
+    // Skip in test environments and when telemetry is not enabled
+    if (typeof process !== 'undefined' && (process.env?.VITEST || process.env?.NODE_ENV === 'test')) {
+      return;
+    }
+
+    if (!telemetryConfig?.enabled) {
+      console.debug('[super-editor] Telemetry: disabled');
+      return;
+    }
+
+    // Root-level licenseKey has a priority; fall back to deprecated telemetry.licenseKey
+    const resolvedLicenseKey =
+      licenseKey !== undefined ? licenseKey : (telemetryConfig.licenseKey ?? COMMUNITY_LICENSE_KEY);
+
+    try {
+      this.#telemetry = new Telemetry({
+        enabled: true,
+        endpoint: telemetryConfig.endpoint,
+        licenseKey: resolvedLicenseKey,
+        metadata: telemetryConfig.metadata,
+      });
+      console.debug('[super-editor] Telemetry: enabled');
+    } catch {
+      // Fail silently - telemetry should never break the app
+    }
+  }
+
+  /**
+   * Ensure document metadata is generated and track telemetry if enabled
+   */
+  #trackDocumentOpen(): void {
+    // Always generate metadata (GUID, timestamp) regardless of telemetry
+    this.getDocumentIdentifier().then((documentId) => {
+      // Only track if telemetry enabled and not already tracked
+      if (!this.#telemetry || this.#documentOpenTracked) return;
+
+      try {
+        const documentCreatedAt = this.converter?.getDocumentCreatedTimestamp?.() || null;
+        this.#telemetry.trackDocumentOpen(documentId, documentCreatedAt);
+        this.#documentOpenTracked = true;
+      } catch {
+        // Fail silently - telemetry should never break the app
+      }
+    });
   }
 
   /**
@@ -672,13 +758,41 @@ export class Editor extends EventEmitter<EditorEventMap> {
         }
       } else {
         // Blank document (source is undefined or null)
-        // Use pre-parsed content from options if provided, otherwise create minimal structure
-        resolvedOptions.content = (options?.content ?? []) as string | Record<string, unknown> | DocxFileEntry[];
-        resolvedOptions.mediaFiles = options?.mediaFiles ?? {};
-        resolvedOptions.fonts = options?.fonts ?? {};
-        resolvedOptions.fileSource = null;
-        resolvedOptions.isNewFile = !options?.content; // Only mark as new if no content provided
-        this.#sourcePath = null;
+        // For docx mode without pre-parsed content, load the blank.docx template
+        const shouldLoadBlankDocx =
+          resolvedMode === 'docx' && !options?.content && !options?.html && !options?.markdown && !options?.json;
+
+        if (shouldLoadBlankDocx) {
+          // Decode base64 blank.docx without fetch
+          const arrayBuffer = await getArrayBufferFromUrl(BLANK_DOCX_DATA_URI);
+          const isNodeRuntime = typeof process !== 'undefined' && !!process.versions?.node;
+          const canUseBuffer = isNodeRuntime && typeof Buffer !== 'undefined';
+          // Use Uint8Array to ensure compatibility with both Node Buffer and browser Blob
+          const uint8Array = new Uint8Array(arrayBuffer);
+          let fileSource: File | Blob | Buffer;
+          if (canUseBuffer) {
+            fileSource = Buffer.from(uint8Array);
+          } else if (typeof Blob !== 'undefined') {
+            fileSource = new Blob([uint8Array as BlobPart]);
+          } else {
+            throw new Error('Blob is not available to create blank DOCX');
+          }
+          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(fileSource, canUseBuffer))!;
+          resolvedOptions.content = docx;
+          resolvedOptions.mediaFiles = mediaFiles;
+          resolvedOptions.fonts = fonts;
+          resolvedOptions.fileSource = fileSource;
+          resolvedOptions.isNewFile = true;
+          this.#sourcePath = null;
+        } else {
+          // Use pre-parsed content from options if provided, otherwise create minimal structure
+          resolvedOptions.content = (options?.content ?? []) as string | Record<string, unknown> | DocxFileEntry[];
+          resolvedOptions.mediaFiles = options?.mediaFiles ?? {};
+          resolvedOptions.fonts = options?.fonts ?? {};
+          resolvedOptions.fileSource = null;
+          resolvedOptions.isNewFile = !options?.content; // Only mark as new if no content provided
+          this.#sourcePath = null;
+        }
       }
 
       // Update options
@@ -951,6 +1065,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
       if (this.isDestroyed) return;
       this.emit('create', { editor: this });
     }, 0);
+
+    // Generate metadata and track telemetry (non-blocking)
+    this.#trackDocumentOpen();
   }
 
   unmount(): void {
@@ -1009,6 +1126,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
       );
       (global as typeof globalThis).window = options.mockWindow as Window & typeof globalThis;
     }
+  }
+
+  /**
+   * Check if web layout mode is enabled (OOXML ST_View 'web')
+   */
+  isWebLayout(): boolean {
+    return this.options.viewOptions?.layout === 'web';
   }
 
   /**
@@ -1505,6 +1629,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         documentId: this.options.documentId,
         mockWindow: this.options.mockWindow ?? null,
         mockDocument: this.options.mockDocument ?? null,
+        isNewFile: this.options.isNewFile ?? false,
       });
     }
   }
@@ -1831,19 +1956,38 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get the maximum content size
+   * Get the maximum content size based on page dimensions and margins
+   * @returns Size object with width and height in pixels, or empty object if no page size
+   * @note In web layout mode, returns empty object to skip content constraints.
+   *       CSS max-width: 100% handles responsive display while preserving full resolution.
    */
   getMaxContentSize(): { width?: number; height?: number } {
     if (!this.converter) return {};
+
+    // In web layout mode: skip constraints, let CSS handle responsive sizing
+    // This preserves full image resolution while CSS max-width: 100% handles display
+    if (this.isWebLayout()) {
+      return {};
+    }
+
     const { pageSize = {}, pageMargins = {} } = this.converter.pageStyles ?? {};
     const { width, height } = pageSize;
-    const { top = 0, bottom = 0, left = 0, right = 0 } = pageMargins;
 
-    // All sizes are in inches so we multiply by 96 to get pixels
     if (!width || !height) return {};
 
-    const maxHeight = height * 96 - top * 96 - bottom * 96 - 50;
-    const maxWidth = width * 96 - left * 96 - right * 96 - 20;
+    // Print layout mode: use document margins (inches converted to pixels)
+    const getMarginPx = (side: 'top' | 'bottom' | 'left' | 'right'): number => {
+      return (pageMargins?.[side] ?? 0) * PIXELS_PER_INCH;
+    };
+
+    const topPx = getMarginPx('top');
+    const bottomPx = getMarginPx('bottom');
+    const leftPx = getMarginPx('left');
+    const rightPx = getMarginPx('right');
+
+    // All sizes are in inches so we multiply by PIXELS_PER_INCH to get pixels
+    const maxHeight = height * PIXELS_PER_INCH - topPx - bottomPx - MAX_HEIGHT_BUFFER_PX;
+    const maxWidth = width * PIXELS_PER_INCH - leftPx - rightPx - MAX_WIDTH_BUFFER_PX;
     return {
       width: maxWidth,
       height: maxHeight,
@@ -1942,7 +2086,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   #dispatchTransaction(transaction: Transaction): void {
     if (this.isDestroyed) return;
-    const start = Date.now();
+    const perf = this.view?.dom?.ownerDocument?.defaultView?.performance ?? globalThis.performance;
+    const perfNow = () => (perf?.now ? perf.now() : Date.now());
+    const perfStart = perfNow();
 
     const prevState = this.state;
     let nextState: EditorState;
@@ -1976,11 +2122,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
       this.view.updateState(nextState);
     }
 
-    const end = Date.now();
+    const end = perfNow();
     this.emit('transaction', {
       editor: this,
       transaction: transactionToApply,
-      duration: end - start,
+      duration: end - perfStart,
     });
 
     if (selectionHasChanged) {
@@ -2008,23 +2154,21 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
     }
 
-    if (!transactionToApply.docChanged) {
-      return;
-    }
-
-    // Track document modifications and promote to GUID if needed
-    if (transaction.docChanged && this.converter) {
-      if (!this.converter.documentGuid) {
-        this.converter.promoteToGuid();
-        console.debug('Document modified - assigned GUID:', this.converter.documentGuid);
+    if (transactionToApply.docChanged) {
+      // Track document modifications and promote to GUID if needed
+      if (transaction.docChanged && this.converter) {
+        if (!this.converter.documentGuid) {
+          this.converter.promoteToGuid();
+          console.debug('Document modified - assigned GUID:', this.converter.documentGuid);
+        }
+        this.converter.documentModified = true;
       }
-      this.converter.documentModified = true;
-    }
 
-    this.emit('update', {
-      editor: this,
-      transaction: transactionToApply,
-    });
+      this.emit('update', {
+        editor: this,
+        transaction: transactionToApply,
+      });
+    }
   }
 
   /**
@@ -2051,7 +2195,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get document identifier (async - may generate hash)
+   * Get document unique identifier (async)
+   * Returns a stable identifier for the document (identifierHash or contentHash)
    */
   async getDocumentIdentifier(): Promise<string | null> {
     return (await this.converter?.getDocumentIdentifier()) || null;
@@ -2381,6 +2526,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     comments,
     getUpdatedDocs = false,
     fieldsHighlightColor = null,
+    compression,
   }: {
     isFinalDoc?: boolean;
     commentsType?: string;
@@ -2389,16 +2535,20 @@ export class Editor extends EventEmitter<EditorEventMap> {
     comments?: Comment[];
     getUpdatedDocs?: boolean;
     fieldsHighlightColor?: string | null;
+    compression?: 'DEFLATE' | 'STORE';
   } = {}): Promise<Blob | ArrayBuffer | Buffer | Record<string, string> | ProseMirrorJSON | string | undefined> {
     try {
       // Use provided comments, or fall back to imported comments from converter
       const effectiveComments = comments ?? this.converter.comments ?? [];
 
-      // Normalize commentJSON property (imported comments use textJson)
-      const preparedComments = effectiveComments.map((comment: Comment) => ({
-        ...comment,
-        commentJSON: comment.commentJSON ?? (comment as Record<string, unknown>).textJson,
-      }));
+      // Normalize commentJSON property (imported comments provide `elements`)
+      const preparedComments = effectiveComments.map((comment: Comment) => {
+        const elements = Array.isArray(comment.elements) && comment.elements.length ? comment.elements : undefined;
+        return {
+          ...comment,
+          commentJSON: comment.commentJSON ?? elements,
+        };
+      });
 
       // Pre-process the document state to prepare for export
       const json = this.#prepareDocumentForExport(preparedComments);
@@ -2449,16 +2599,20 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       const numberingData = this.converter.convertedXml['word/numbering.xml'];
       const numbering = this.converter.schemaToXml(numberingData.elements[0]);
+
+      // Export core.xml (contains dcterms:created timestamp)
+      const coreXmlData = this.converter.convertedXml['docProps/core.xml'];
+      const coreXml = coreXmlData?.elements?.[0] ? this.converter.schemaToXml(coreXmlData.elements[0]) : null;
+
       const updatedDocs: Record<string, string> = {
         ...this.options.customUpdatedFiles,
         'word/document.xml': String(documentXml),
         'docProps/custom.xml': String(customXml),
         'word/_rels/document.xml.rels': String(rels),
         'word/numbering.xml': String(numbering),
-
-        // Replace & with &amp; in styles.xml as DOCX viewers can't handle it
-        'word/styles.xml': String(styles).replace(/&/gi, '&amp;'),
+        'word/styles.xml': String(styles),
         ...updatedHeadersFooters,
+        ...(coreXml ? { 'docProps/core.xml': String(coreXml) } : {}),
       };
 
       if (hasCustomSettings) {
@@ -2517,6 +2671,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         media,
         fonts: this.options.fonts,
         isHeadless: this.options.isHeadless,
+        compression,
       });
 
       return result;
@@ -2787,6 +2942,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       commentsType: options?.commentsType,
       comments: options?.comments,
       fieldsHighlightColor: options?.fieldsHighlightColor,
+      compression: options?.compression,
     });
 
     return result as Blob | Buffer;

@@ -1,4 +1,9 @@
-import { updateCommentsExtendedXml, updateCommentsIdsAndExtensible, toIsoNoFractional } from './commentsExporter.js';
+import {
+  updateCommentsExtendedXml,
+  updateCommentsIdsAndExtensible,
+  updateCommentsXml,
+  toIsoNoFractional,
+} from './commentsExporter.js';
 
 describe('updateCommentsIdsAndExtensible', () => {
   const comments = [
@@ -102,5 +107,74 @@ describe('updateCommentsExtendedXml', () => {
     const childEntry = entries.find((entry) => entry.attributes['w15:paraId'] === 'CHILD-PARA');
 
     expect(childEntry.attributes['w15:paraIdParent']).toBe('PARENT-PARA');
+  });
+
+  it('sets paraIdParent for range-based threads to preserve Word threading', () => {
+    const comments = [
+      {
+        commentId: 'parent-comment',
+        commentParaId: 'PARENT-PARA',
+        resolvedTime: null,
+        threadingMethod: 'range-based',
+        originalXmlStructure: { hasCommentsExtended: false },
+      },
+      {
+        commentId: 'child-comment',
+        commentParaId: 'CHILD-PARA',
+        parentCommentId: 'parent-comment',
+        resolvedTime: null,
+        threadingMethod: 'range-based',
+        originalXmlStructure: { hasCommentsExtended: false },
+      },
+    ];
+
+    const commentsExtendedXml = {
+      elements: [{ elements: [] }],
+    };
+
+    const profile = {
+      defaultStyle: 'range-based',
+      mixed: false,
+      fileSet: {
+        hasCommentsExtended: false,
+        hasCommentsExtensible: false,
+        hasCommentsIds: false,
+      },
+    };
+
+    const result = updateCommentsExtendedXml(comments, commentsExtendedXml, profile);
+    const entries = result.elements[0].elements;
+    const childEntry = entries.find((entry) => entry.attributes['w15:paraId'] === 'CHILD-PARA');
+
+    expect(childEntry.attributes['w15:paraIdParent']).toBe('PARENT-PARA');
+  });
+});
+
+describe('updateCommentsXml', () => {
+  it('stamps w14:paraId on the final paragraph for multi-paragraph comments', () => {
+    const commentDef = {
+      type: 'element',
+      name: 'w:comment',
+      attributes: {
+        'w:id': '0',
+        'w:author': 'Author',
+        'w:date': '2025-01-01T00:00:00Z',
+        'w:initials': 'A',
+        'w15:paraId': 'ABC12345',
+      },
+      elements: [
+        { type: 'element', name: 'w:p', attributes: {}, elements: [] },
+        { type: 'element', name: 'w:p', attributes: {}, elements: [] },
+      ],
+    };
+    const commentsXml = {
+      elements: [{ elements: [] }],
+    };
+
+    const result = updateCommentsXml([commentDef], commentsXml);
+    const updatedComment = result.elements[0].elements[0];
+    const lastParagraph = updatedComment.elements[updatedComment.elements.length - 1];
+
+    expect(lastParagraph.attributes['w14:paraId']).toBe('ABC12345');
   });
 });

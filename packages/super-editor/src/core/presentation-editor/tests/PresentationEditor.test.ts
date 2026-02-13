@@ -207,9 +207,13 @@ vi.mock('../../Editor', () => {
 });
 
 // Mock pm-adapter functions
-vi.mock('@superdoc/pm-adapter', () => ({
-  toFlowBlocks: mockToFlowBlocks,
-}));
+vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
+  return {
+    ...actual,
+    toFlowBlocks: mockToFlowBlocks,
+  };
+});
 
 // Mock layout-bridge functions
 vi.mock('@superdoc/layout-bridge', () => ({
@@ -2441,6 +2445,7 @@ describe('PresentationEditor', () => {
         const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
           (Editor as unknown as MockedEditor).mock.results.length - 1
         ].value;
+        mockEditorInstance.view.hasFocus = vi.fn(() => true);
 
         // Mock editor state with valid selection at position 5
         mockEditorInstance.state = {
@@ -3018,6 +3023,7 @@ describe('PresentationEditor', () => {
   describe('Field annotation drag-and-drop handlers', () => {
     let mockHitTest: Mock;
     let mockGetActiveEditor: Mock;
+    let rafSpy: ReturnType<typeof vi.spyOn> | null = null;
     let mockActiveEditor: {
       isEditable: boolean;
       state: {
@@ -3078,6 +3084,12 @@ describe('PresentationEditor', () => {
     };
 
     beforeEach(() => {
+      // Mock requestAnimationFrame to execute immediately (for RAF-based dragover coalescing)
+      rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+        cb(0);
+        return 1;
+      });
+
       // Create a container element for the presentation editor
       container = document.createElement('div');
       document.body.appendChild(container);
@@ -3127,6 +3139,10 @@ describe('PresentationEditor', () => {
       // Mock getActiveEditor method
       mockGetActiveEditor = vi.fn(() => mockActiveEditor);
       editor.getActiveEditor = mockGetActiveEditor;
+    });
+
+    afterEach(() => {
+      rafSpy?.mockRestore();
     });
 
     describe('#handleDragOver', () => {

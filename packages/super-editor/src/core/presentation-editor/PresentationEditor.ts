@@ -1,4 +1,5 @@
 import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
+import { SlashMenuPluginKey } from '@extensions/slash-menu/slash-menu.js';
 import { CellSelection } from 'prosemirror-tables';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
@@ -15,8 +16,12 @@ import {
 import {
   convertPageLocalToOverlayCoords as convertPageLocalToOverlayCoordsFromTransform,
   getPageOffsetX as getPageOffsetXFromTransform,
+  getPageOffsetY as getPageOffsetYFromTransform,
 } from './dom/CoordinateTransform.js';
-import { normalizeClientPoint as normalizeClientPointFromPointer } from './dom/PointerNormalization.js';
+import {
+  normalizeClientPoint as normalizeClientPointFromPointer,
+  denormalizeClientPoint as denormalizeClientPointFromPointer,
+} from './dom/PointerNormalization.js';
 import { getPageElementByIndex } from './dom/PageDom.js';
 import { inchesToPx, parseColumns } from './layout/LayoutOptionParsing.js';
 import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/PresentationLayoutMetrics.js';
@@ -62,7 +67,7 @@ import { DragDropManager } from './input/DragDropManager.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
 import { decodeRPrFromMarks } from '../super-converter/styles.js';
 import { halfPointToPoints } from '../super-converter/helpers.js';
-import { toFlowBlocks, ConverterContext } from '@superdoc/pm-adapter';
+import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
 import {
   incrementalLayout,
   selectionToRects,
@@ -78,11 +83,12 @@ import type {
   HeaderFooterLayoutResult,
   HeaderFooterType,
   PositionHit,
-  MultiSectionHeaderFooterIdentifier,
   TableHitResult,
 } from '@superdoc/layout-bridge';
+
 import { createDomPainter } from '@superdoc/painter-dom';
-import type { LayoutMode, PageDecorationProvider, RulerOptions } from '@superdoc/painter-dom';
+
+import type { LayoutMode } from '@superdoc/painter-dom';
 import { measureBlock } from '@superdoc/measuring-dom';
 import type {
   ColumnLayout,
@@ -169,9 +175,7 @@ const SUBSCRIPT_SUPERSCRIPT_SCALE = 0.65;
 
 const DEFAULT_PAGE_SIZE: PageSize = { w: 612, h: 792 }; // Letter @ 72dpi
 const DEFAULT_MARGINS: PageMargins = { top: 72, right: 72, bottom: 72, left: 72 };
-/** Default gap between pages when virtualization is enabled (matches renderer.ts virtualGap) */
-const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
-/** Default gap between pages without virtualization (from containerStyles in styles.ts) */
+/** Default gap between pages (from containerStyles in styles.ts) */
 const DEFAULT_PAGE_GAP = 24;
 /** Default gap for horizontal layout mode */
 const DEFAULT_HORIZONTAL_PAGE_GAP = 20;
@@ -181,6 +185,16 @@ const DEFAULT_HORIZONTAL_PAGE_GAP = 20;
 const MULTI_CLICK_TIME_THRESHOLD_MS = 400;
 /** Maximum distance between clicks to register as multi-click (pixels) */
 const MULTI_CLICK_DISTANCE_THRESHOLD_PX = 5;
+
+/** Debug flag for performance logging - enable with SD_DEBUG_LAYOUT env variable */
+const layoutDebugEnabled =
+  typeof process !== 'undefined' && typeof process.env !== 'undefined' && Boolean(process.env.SD_DEBUG_LAYOUT);
+
+/** Log performance metrics when debug is enabled */
+const perfLog = (...args: unknown[]): void => {
+  if (!layoutDebugEnabled) return;
+  console.log(...args);
+};
 /** Budget for header/footer initialization before warning (milliseconds) */
 const HEADER_FOOTER_INIT_BUDGET_MS = 200;
 /** Maximum zoom level before warning */
@@ -254,6 +268,9 @@ export class PresentationEditor extends EventEmitter {
   #hiddenHost: HTMLElement;
   #layoutOptions: LayoutEngineOptions;
   #layoutState: LayoutState = { blocks: [], measures: [], layout: null, bookmarks: new Map() };
+  /** Cache for incremental toFlowBlocks conversion */
+  #flowBlockCache: FlowBlockCache = new FlowBlockCache();
+  #footnoteNumberSignature: string | null = null;
   #domPainter: ReturnType<typeof createDomPainter> | null = null;
   #pageGeometryHelper: PageGeometryHelper | null = null;
   #dragDropManager: DragDropManager | null = null;
@@ -275,6 +292,8 @@ export class PresentationEditor extends EventEmitter {
   #domIndexObserverManager: DomPositionIndexObserverManager | null = null;
   #rafHandle: number | null = null;
   #editorListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
+  #scrollHandler: (() => void) | null = null;
+  #scrollContainer: Element | Window | null = null;
   #sectionMetadata: SectionMetadata[] = [];
   #documentMode: 'editing' | 'viewing' | 'suggesting' = 'editing';
   #inputBridge: PresentationInputBridge | null = null;
@@ -1031,6 +1050,8 @@ export class PresentationEditor extends EventEmitter {
     // Re-render if mode changed OR tracked changes preferences changed.
     // Mode change affects enableComments in toFlowBlocks even if tracked changes didn't change.
     if (modeChanged || trackedChangesChanged) {
+      // Clear flow block cache since conversion-affecting settings changed
+      this.#flowBlockCache.clear();
       this.#pendingDocChange = true;
       this.#scheduleRerender();
     }
@@ -1068,6 +1089,8 @@ export class PresentationEditor extends EventEmitter {
     this.#layoutOptions.trackedChanges = overrides;
     const trackedChangesChanged = this.#syncTrackedChangesPreferences();
     if (trackedChangesChanged) {
+      // Clear flow block cache since conversion-affecting settings changed
+      this.#flowBlockCache.clear();
       this.#pendingDocChange = true;
       this.#scheduleRerender();
     }
@@ -1102,6 +1125,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     if (hasChanges) {
+      // Clear flow block cache since comment settings affect block conversion
+      this.#flowBlockCache.clear();
       this.#pendingDocChange = true;
       this.#scheduleRerender();
     }
@@ -1681,9 +1706,7 @@ export class PresentationEditor extends EventEmitter {
     const isLeftMargin = marginLeft > 0 && x < marginLeft;
     const isRightMargin = marginRight > 0 && x > pageWidth - marginRight;
 
-    const pageEl = this.#viewportHost.querySelector(
-      `.superdoc-page[data-page-index="${pageIndex}"]`,
-    ) as HTMLElement | null;
+    const pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
     if (!pageEl) {
       return null;
     }
@@ -2136,6 +2159,15 @@ export class PresentationEditor extends EventEmitter {
       }, 'Editor input manager');
     }
 
+    if (this.#scrollHandler) {
+      if (this.#scrollContainer) {
+        this.#scrollContainer.removeEventListener('scroll', this.#scrollHandler);
+      }
+      const win = this.#visibleHost?.ownerDocument?.defaultView;
+      win?.removeEventListener('scroll', this.#scrollHandler);
+      this.#scrollHandler = null;
+      this.#scrollContainer = null;
+    }
     this.#inputBridge?.notifyTargetChanged();
     this.#inputBridge?.destroy();
     this.#inputBridge = null;
@@ -2155,6 +2187,9 @@ export class PresentationEditor extends EventEmitter {
       this.#headerFooterSession?.destroy();
       this.#headerFooterSession = null;
     }, 'Header/footer session manager');
+
+    // Clear flow block cache to free memory
+    this.#flowBlockCache.clear();
 
     this.#domPainter = null;
     this.#pageGeometryHelper = null;
@@ -2277,6 +2312,27 @@ export class PresentationEditor extends EventEmitter {
       event: 'remoteHeaderFooterChanged',
       handler: handleRemoteHeaderFooterChanged as (...args: unknown[]) => void,
     });
+
+    // Listen for comment selection changes to update Layout Engine highlighting
+    const handleCommentsUpdate = (payload: { activeCommentId?: string | null }) => {
+      if (this.#domPainter?.setActiveComment) {
+        // Only update active comment when the field is explicitly present in the payload.
+        // This prevents unrelated events (like tracked change updates) from clearing
+        // the active comment selection unexpectedly.
+        if ('activeCommentId' in payload) {
+          const activeId = payload.activeCommentId ?? null;
+          this.#domPainter.setActiveComment(activeId);
+          // Mark as needing re-render to apply the new active comment highlighting
+          this.#pendingDocChange = true;
+          this.#scheduleRerender();
+        }
+      }
+    };
+    this.#editor.on('commentsUpdate', handleCommentsUpdate);
+    this.#editorListeners.push({
+      event: 'commentsUpdate',
+      handler: handleCommentsUpdate as (...args: unknown[]) => void,
+    });
   }
 
   /**
@@ -2362,6 +2418,7 @@ export class PresentationEditor extends EventEmitter {
       getEpochMapper: () => this.#epochMapper,
       getViewportHost: () => this.#viewportHost,
       getVisibleHost: () => this.#visibleHost,
+      getLayoutMode: () => this.#layoutOptions.layoutMode ?? 'vertical',
       getHeaderFooterSession: () => this.#headerFooterSession,
       getPageGeometryHelper: () => this.#pageGeometryHelper,
       getZoom: () => this.#layoutOptions.zoom ?? 1,
@@ -2408,6 +2465,52 @@ export class PresentationEditor extends EventEmitter {
   #setupPointerHandlers() {
     // Delegate to EditorInputManager for pointer events
     this.#editorInputManager?.bind();
+
+    // Scroll handler for virtualization - find the actual scroll container
+    // by walking up the DOM tree to find the first scrollable ancestor
+    this.#scrollHandler = () => {
+      this.#domPainter?.onScroll?.();
+    };
+
+    // Find the scrollable ancestor and attach listener there
+    this.#scrollContainer = this.#findScrollableAncestor(this.#visibleHost);
+    if (this.#scrollContainer) {
+      this.#scrollContainer.addEventListener('scroll', this.#scrollHandler, { passive: true });
+    }
+
+    // Also listen on window as fallback
+    const win = this.#visibleHost.ownerDocument?.defaultView;
+    if (win && this.#scrollContainer !== win) {
+      win.addEventListener('scroll', this.#scrollHandler, { passive: true });
+    }
+  }
+
+  /**
+   * Finds the first scrollable ancestor of an element.
+   * Returns the element itself if it's scrollable, or walks up the tree.
+   *
+   * Note: We only check for overflow CSS property, not whether content currently
+   * overflows. At setup time, content may not be laid out yet, but the element
+   * with overflow:auto/scroll will become the scroll container once content grows.
+   */
+  #findScrollableAncestor(element: HTMLElement): Element | Window | null {
+    const win = element.ownerDocument?.defaultView;
+    if (!win) return null;
+
+    let current: Element | null = element;
+    while (current) {
+      const style = win.getComputedStyle(current);
+      const overflowY = style.overflowY;
+      // Check for scrollable overflow property - don't require hasScroll since
+      // content may not be laid out yet at setup time
+      if (overflowY === 'auto' || overflowY === 'scroll') {
+        return current;
+      }
+      current = current.parentElement;
+    }
+
+    // If no scrollable ancestor found, return window
+    return win;
   }
 
   /**
@@ -2729,9 +2832,13 @@ export class PresentationEditor extends EventEmitter {
       let docJson;
       const viewWindow = this.#visibleHost.ownerDocument?.defaultView ?? window;
       const perf = viewWindow?.performance ?? GLOBAL_PERFORMANCE;
+      const perfNow = () => (perf?.now ? perf.now() : Date.now());
       const startMark = perf?.now?.();
       try {
+        const getJsonStart = perfNow();
         docJson = this.#editor.getJSON();
+        const getJsonEnd = perfNow();
+        perfLog(`[Perf] getJSON: ${(getJsonEnd - getJsonStart).toFixed(2)}ms`);
       } catch (error) {
         this.#handleLayoutError('render', this.#decorateError(error, 'getJSON'));
         return;
@@ -2747,6 +2854,7 @@ export class PresentationEditor extends EventEmitter {
         // Compute visible footnote numbering (1-based) by first appearance in the document.
         // This matches Word behavior even when OOXML ids are non-contiguous or start at 0.
         const footnoteNumberById: Record<string, number> = {};
+        const footnoteOrder: string[] = [];
         try {
           const seen = new Set<string>();
           let counter = 1;
@@ -2758,9 +2866,22 @@ export class PresentationEditor extends EventEmitter {
             if (!key || seen.has(key)) return;
             seen.add(key);
             footnoteNumberById[key] = counter;
+            footnoteOrder.push(key);
             counter += 1;
           });
-        } catch {}
+        } catch (e) {
+          // Log traversal errors - footnote numbering may be incorrect if this fails
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[PresentationEditor] Failed to compute footnote numbering:', e);
+          }
+        }
+        // Invalidate flow block cache when footnote order changes, since footnote
+        // numbers are embedded in cached blocks and must be recomputed.
+        const footnoteSignature = footnoteOrder.join('|');
+        if (footnoteSignature !== this.#footnoteNumberSignature) {
+          this.#flowBlockCache.clear();
+          this.#footnoteNumberSignature = footnoteSignature;
+        }
         // Expose numbering to node views and layout adapter.
         try {
           if (converter && typeof converter === 'object') {
@@ -2771,16 +2892,20 @@ export class PresentationEditor extends EventEmitter {
         converterContext = converter
           ? {
               docx: converter.convertedXml,
-              numbering: converter.numbering,
-              linkedStyles: converter.linkedStyles,
               ...(Object.keys(footnoteNumberById).length ? { footnoteNumberById } : {}),
+              translatedLinkedStyles: converter.translatedLinkedStyles,
+              translatedNumbering: converter.translatedNumbering,
             }
           : undefined;
         const atomNodeTypes = getAtomNodeTypesFromSchema(this.#editor?.schema ?? null);
+        const positionMapStart = perfNow();
         const positionMap =
           this.#editor?.state?.doc && docJson ? buildPositionMapFromPmDoc(this.#editor.state.doc, docJson) : null;
+        const positionMapEnd = perfNow();
+        perfLog(`[Perf] buildPositionMapFromPmDoc: ${(positionMapEnd - positionMapStart).toFixed(2)}ms`);
         const commentsEnabled =
           this.#documentMode !== 'viewing' || this.#layoutOptions.enableCommentsInViewing === true;
+        const toFlowBlocksStart = perfNow();
         const result = toFlowBlocks(docJson, {
           mediaFiles: (this.#editor?.storage?.image as { media?: Record<string, string> })?.media,
           emitSectionBreaks: true,
@@ -2791,9 +2916,14 @@ export class PresentationEditor extends EventEmitter {
           enableRichHyperlinks: true,
           themeColors: this.#editor?.converter?.themeColors ?? undefined,
           converterContext,
+          flowBlockCache: this.#flowBlockCache,
           ...(positionMap ? { positions: positionMap } : {}),
           ...(atomNodeTypes.length > 0 ? { atomNodeTypes } : {}),
         });
+        const toFlowBlocksEnd = perfNow();
+        perfLog(
+          `[Perf] toFlowBlocks: ${(toFlowBlocksEnd - toFlowBlocksStart).toFixed(2)}ms (blocks=${result.blocks.length})`,
+        );
         blocks = result.blocks;
         bookmarks = result.bookmarks ?? new Map();
       } catch (error) {
@@ -2820,6 +2950,7 @@ export class PresentationEditor extends EventEmitter {
         : baseLayoutOptions;
       const previousBlocks = this.#layoutState.blocks;
       const previousLayout = this.#layoutState.layout;
+      const previousMeasures = this.#layoutState.measures;
 
       let layout: Layout;
       let measures: Measure[];
@@ -2829,6 +2960,7 @@ export class PresentationEditor extends EventEmitter {
       let extraMeasures: Measure[] | undefined;
       const headerFooterInput = this.#buildHeaderFooterInput();
       try {
+        const incrementalLayoutStart = perfNow();
         const result = await incrementalLayout(
           previousBlocks,
           previousLayout,
@@ -2836,7 +2968,10 @@ export class PresentationEditor extends EventEmitter {
           layoutOptions,
           (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) => measureBlock(block, constraints),
           headerFooterInput ?? undefined,
+          previousMeasures,
         );
+        const incrementalLayoutEnd = perfNow();
+        perfLog(`[Perf] incrementalLayout: ${(incrementalLayoutEnd - incrementalLayoutStart).toFixed(2)}ms`);
 
         // Type guard: validate incrementalLayout return value
         if (!result || typeof result !== 'object') {
@@ -2952,6 +3087,7 @@ export class PresentationEditor extends EventEmitter {
       }
 
       // Pass all blocks (main document + headers + footers + extras) to the painter
+      const painterSetDataStart = perfNow();
       painter.setData?.(
         blocks,
         measures,
@@ -2960,16 +3096,24 @@ export class PresentationEditor extends EventEmitter {
         footerBlocks.length > 0 ? footerBlocks : undefined,
         footerMeasures.length > 0 ? footerMeasures : undefined,
       );
+      const painterSetDataEnd = perfNow();
+      perfLog(`[Perf] painter.setData: ${(painterSetDataEnd - painterSetDataStart).toFixed(2)}ms`);
       // Avoid MutationObserver overhead while repainting large DOM trees.
       this.#domIndexObserverManager?.pause();
       // Pass the transaction mapping for efficient position attribute updates.
       // Consumed here and cleared to prevent stale mappings on subsequent paints.
       const mapping = this.#pendingMapping;
       this.#pendingMapping = null;
+      const painterPaintStart = perfNow();
       painter.paint(layout, this.#painterHost, mapping ?? undefined);
+      const painterPaintEnd = perfNow();
+      perfLog(`[Perf] painter.paint: ${(painterPaintEnd - painterPaintStart).toFixed(2)}ms`);
+      const painterPostStart = perfNow();
       this.#applyVertAlignToLayout();
       this.#rebuildDomPositionIndex();
       this.#domIndexObserverManager?.resume();
+      const painterPostEnd = perfNow();
+      perfLog(`[Perf] painter.postPaint: ${(painterPostEnd - painterPostStart).toFixed(2)}ms`);
       this.#layoutEpoch = layoutEpoch;
       if (this.#updateHtmlAnnotationMeasurements(layoutEpoch)) {
         this.#pendingDocChange = true;
@@ -3221,8 +3365,22 @@ export class PresentationEditor extends EventEmitter {
       }
       return;
     }
+
+    const activeEditor = this.getActiveEditor();
+    const hasFocus = activeEditor?.view?.hasFocus?.() ?? false;
+    // Keep selection visible when context menu (SlashMenu) is open
+    const slashMenuOpen = activeEditor?.state ? !!SlashMenuPluginKey.getState(activeEditor.state)?.open : false;
+
+    if (!hasFocus && !slashMenuOpen) {
+      try {
+        this.#clearSelectedFieldAnnotationClass();
+        this.#localSelectionLayer.innerHTML = '';
+      } catch {}
+      return;
+    }
+
     const layout = this.#layoutState.layout;
-    const editorState = this.getActiveEditor().state;
+    const editorState = activeEditor.state;
     const selection = editorState?.selection;
 
     if (!selection) {
@@ -3955,10 +4113,12 @@ export class PresentationEditor extends EventEmitter {
   /**
    * Get effective page gap based on layout mode and virtualization settings.
    * Keeps painter, layout, and geometry in sync.
+   * Uses DEFAULT_PAGE_GAP for both virtualized and non-virtualized modes for visual consistency.
    */
   #getEffectivePageGap(): number {
     if (this.#layoutOptions.virtualization?.enabled) {
-      return Math.max(0, this.#layoutOptions.virtualization.gap ?? DEFAULT_VIRTUALIZED_PAGE_GAP);
+      // Use explicit gap if provided, otherwise use same default as non-virtualized for consistency
+      return Math.max(0, this.#layoutOptions.virtualization.gap ?? DEFAULT_PAGE_GAP);
     }
     if (this.#layoutOptions.layoutMode === 'horizontal') {
       return DEFAULT_HORIZONTAL_PAGE_GAP;
@@ -4290,6 +4450,15 @@ export class PresentationEditor extends EventEmitter {
     });
   }
 
+  #getPageOffsetY(pageIndex: number): number | null {
+    return getPageOffsetYFromTransform({
+      painterHost: this.#painterHost,
+      viewportHost: this.#viewportHost,
+      zoom: this.#layoutOptions.zoom ?? 1,
+      pageIndex,
+    });
+  }
+
   #convertPageLocalToOverlayCoords(
     pageIndex: number,
     pageLocalX: number,
@@ -4356,9 +4525,31 @@ export class PresentationEditor extends EventEmitter {
         visibleHost: this.#visibleHost,
         zoom: this.#layoutOptions.zoom ?? 1,
         getPageOffsetX: (pageIndex) => this.#getPageOffsetX(pageIndex),
+        getPageOffsetY: (pageIndex) => this.#getPageOffsetY(pageIndex),
       },
       clientX,
       clientY,
+    );
+  }
+
+  denormalizeClientPoint(
+    layoutX: number,
+    layoutY: number,
+    pageIndex?: number,
+    height?: number,
+  ): { x: number; y: number; height?: number } | null {
+    return denormalizeClientPointFromPointer(
+      {
+        viewportHost: this.#viewportHost,
+        visibleHost: this.#visibleHost,
+        zoom: this.#layoutOptions.zoom ?? 1,
+        getPageOffsetX: (pageIndex) => this.#getPageOffsetX(pageIndex),
+        getPageOffsetY: (pageIndex) => this.#getPageOffsetY(pageIndex),
+      },
+      layoutX,
+      layoutY,
+      pageIndex,
+      height,
     );
   }
 
@@ -4443,6 +4634,10 @@ export class PresentationEditor extends EventEmitter {
       };
     }
     return geometry;
+  }
+
+  computeCaretLayoutRect(pos: number): { pageIndex: number; x: number; y: number; height: number } | null {
+    return this.#computeCaretLayoutRect(pos);
   }
 
   #getCurrentPageIndex(): number {

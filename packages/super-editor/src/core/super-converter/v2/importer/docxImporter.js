@@ -1,6 +1,6 @@
 import { getInitialJSON } from '../docxHelper.js';
 import { carbonCopy } from '../../../utilities/carbonCopy.js';
-import { twipsToInches } from '../../helpers.js';
+import { twipsToInches, resolveOpcTargetPath } from '../../helpers.js';
 import { DEFAULT_LINKED_STYLES } from '../../exporter-docx-defs.js';
 import { drawingNodeHandlerEntity } from './imageImporter.js';
 import { trackChangeNodeHandlerEntity } from './trackChangesImporter.js';
@@ -34,6 +34,10 @@ import { permStartHandlerEntity } from './permStartImporter.js';
 import { permEndHandlerEntity } from './permEndImporter.js';
 import bookmarkStartAttrConfigs from '@converter/v3/handlers/w/bookmark-start/attributes/index.js';
 import bookmarkEndAttrConfigs from '@converter/v3/handlers/w/bookmark-end/attributes/index.js';
+import { translator as wStylesTranslator } from '@converter/v3/handlers/w/styles/index.js';
+import { translator as wNumberingTranslator } from '@converter/v3/handlers/w/numbering/index.js';
+import { baseNumbering } from '@converter/v2/exporter/helpers/base-list.definitions.js';
+import { patchNumberingDefinitions } from './patchNumberingDefinitions.js';
 
 /**
  * @typedef {import()} XmlNode
@@ -139,15 +143,22 @@ export const createDocumentJson = (docx, converter, editor) => {
     const lists = {};
     const inlineDocumentFonts = [];
 
+    patchNumberingDefinitions(docx);
     const numbering = getNumberingDefinitions(docx);
     const comments = importCommentData({ docx, nodeListHandler, converter, editor });
     const footnotes = importFootnoteData({ docx, nodeListHandler, converter, editor, numbering });
+
+    const translatedLinkedStyles = translateStyleDefinitions(docx);
+    const translatedNumbering = translateNumberingDefinitions(docx);
+
     let parsedContent = nodeListHandler.handler({
       nodes: content,
       nodeListHandler,
       docx,
       converter,
       numbering,
+      translatedNumbering,
+      translatedLinkedStyles,
       editor,
       inlineDocumentFonts,
       lists,
@@ -171,12 +182,22 @@ export const createDocumentJson = (docx, converter, editor) => {
     return {
       pmDoc: result,
       savedTagsToRestore: node,
-      pageStyles: getDocumentStyles(node, docx, converter, editor, numbering),
+      pageStyles: getDocumentStyles(
+        node,
+        docx,
+        converter,
+        editor,
+        numbering,
+        translatedNumbering,
+        translatedLinkedStyles,
+      ),
       comments,
       footnotes,
       inlineDocumentFonts,
       linkedStyles: getStyleDefinitions(docx, converter, editor),
+      translatedLinkedStyles,
       numbering: getNumberingDefinitions(docx, converter),
+      translatedNumbering,
       themeColors: getThemeColorPalette(docx),
     };
   }
@@ -259,6 +280,8 @@ const createNodeListHandler = (nodeHandlers) => {
     insideTrackChange,
     converter,
     numbering,
+    translatedNumbering,
+    translatedLinkedStyles,
     editor,
     filename,
     parentStyleId,
@@ -292,6 +315,8 @@ const createNodeListHandler = (nodeHandlers) => {
                 insideTrackChange,
                 converter,
                 numbering,
+                translatedNumbering,
+                translatedLinkedStyles,
                 editor,
                 filename,
                 parentStyleId,
@@ -412,7 +437,7 @@ function importFootnotePropertiesFromSettings(docx, converter) {
  * @param {Editor} editor instance.
  * @returns {Object} The document styles object
  */
-function getDocumentStyles(node, docx, converter, editor, numbering) {
+function getDocumentStyles(node, docx, converter, editor, numbering, translatedNumbering, translatedLinkedStyles) {
   const sectPr = node.elements?.find((n) => n.name === 'w:sectPr');
   const styles = {};
 
@@ -461,7 +486,7 @@ function getDocumentStyles(node, docx, converter, editor, numbering) {
   });
 
   // Import headers and footers. Stores them in converter.headers and converter.footers
-  importHeadersFooters(docx, converter, editor, numbering);
+  importHeadersFooters(docx, converter, editor, numbering, translatedNumbering, translatedLinkedStyles);
   styles.alternateHeaders = isAlternatingHeadersOddEven(docx);
   return styles;
 }
@@ -567,6 +592,21 @@ function getStyleDefinitions(docx) {
   return allParsedStyles;
 }
 
+export function translateStyleDefinitions(docx) {
+  const styles = docx['word/styles.xml'];
+  if (!styles) return [];
+  const stylesElement = styles.elements[0];
+  const parsedStyles = wStylesTranslator.encode({ nodes: [stylesElement] });
+  return parsedStyles;
+}
+
+function translateNumberingDefinitions(docx) {
+  const numbering = docx['word/numbering.xml'] ?? baseNumbering;
+  const numberingElement = numbering.elements[0];
+  const parsedNumbering = wNumberingTranslator.encode({ nodes: [numberingElement] });
+  return parsedNumbering;
+}
+
 /**
  * Add default styles if missing. Default styles are:
  *
@@ -600,12 +640,11 @@ export function addDefaultStylesIfMissing(styles) {
  * @param {Object} converter The converter instance
  * @param {Editor} mainEditor The editor instance
  */
-const importHeadersFooters = (docx, converter, mainEditor) => {
+const importHeadersFooters = (docx, converter, mainEditor, numbering, translatedNumbering, translatedLinkedStyles) => {
   const rels = docx['word/_rels/document.xml.rels'];
   const relationships = rels?.elements.find((el) => el.name === 'Relationships');
   const { elements } = relationships || { elements: [] };
 
-  const numbering = getNumberingDefinitions(docx);
   const headerType = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header';
   const footerType = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer';
   const headers = elements.filter((el) => el.attributes['Type'] === headerType);
@@ -639,6 +678,8 @@ const importHeadersFooters = (docx, converter, mainEditor) => {
       docx,
       converter,
       numbering,
+      translatedNumbering,
+      translatedLinkedStyles,
       editor,
       filename: currentFileName,
       path: [],
@@ -716,8 +757,12 @@ const findSectPr = (obj, result = []) => {
 const getHeaderFooterSectionData = (sectionData, docx) => {
   const rId = sectionData.attributes.Id;
   const target = sectionData.attributes.Target;
-  const referenceFile = docx[`word/${target}`];
-  const currentFileName = target;
+  const filePath = resolveOpcTargetPath(target, 'word');
+  const referenceFile = filePath ? docx[filePath] : undefined;
+  // Extract just the filename for relationship file lookup.
+  // This handles both absolute paths (/word/header1.xml -> header1.xml)
+  // and relative paths (header1.xml -> header1.xml) per ECMA-376 OPC spec.
+  const currentFileName = filePath ? filePath.split('/').pop() : target.split('/').pop();
   return {
     rId,
     referenceFile,
@@ -771,10 +816,14 @@ export function filterOutRootInlineNodes(content = []) {
     const type = node.type;
     const preservableNodeName = PRESERVABLE_INLINE_XML_NAMES[type];
 
-    // Special case: anchored images should be preserved at root level
-    // because they're positioned absolutely and behave like block elements
+    // Anchored images are inline nodes; wrap them to satisfy doc's block-only root.
     if (type === 'image' && node.attrs?.isAnchor) {
-      result.push(node);
+      result.push({
+        type: 'paragraph',
+        content: [node],
+        attrs: {},
+        marks: [],
+      });
       return;
     }
 
