@@ -1,0 +1,8 @@
+.dev-app--dragging {
+  border: 4px dashed #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.dev-app--dragging * {
+  pointer-events: none;
+}
