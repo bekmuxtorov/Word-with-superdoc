@@ -104,42 +104,40 @@ const handleInsertQRCode = async () => {
   console.log('Schema nodes:', Object.keys(editor.state.schema.nodes));
   
   try {
-    // Convert the imported QR code URL to Base64 to ensure it displays and bypasses the plugin
+    // Convert QR code to base64 because imageRegistrationPlugin only accepts:
+    // - http/https URLs
+    // - data: URIs (base64)
+    // It does NOT accept relative paths like /src/assets/qr.png
     const qrUrl = new URL(QRCodeImage, window.location.origin).href;
     console.log('Fetching QR from:', qrUrl);
     
     const response = await fetch(qrUrl);
-    console.log('Response status:', response.status);
-    console.log('Content-Type:', response.headers.get('content-type'));
-    
     if (!response.ok) throw new Error(`Failed to fetch image: ${response.status}`);
     
     const blob = await response.blob();
-    console.log('Blob size:', blob.size);
-    
-    const base64RealQR = await new Promise((resolve, reject) => {
+    const base64QR = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result);
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
     
-    console.log('Base64 start:', base64RealQR.substring(0, 50) + '...');
+    console.log('Converted QR to base64, length:', base64QR.length);
 
     const imageNode = editor.schema.nodes.image.create({
-      src: base64RealQR,
+      src: base64QR,
       alt: 'QR Code',
       title: '{{qrcode}}',
-      ignoreRegistration: true, // Specific attribute to bypass plugin validation without breaking DOCX export
-      // Use direct style to force size, bypassing complex size logic in extension
-      style: 'width: 100px; height: 100px; border: 1px solid red; display: inline-block;'
+      ignoreRegistration: true, // Bypass browser imageRegistrationPlugin
+      size: {
+        width: 100,
+        height: 100
+      }
     });
     
-    console.log('Created image node with real QR');
+    console.log('Created image node with base64 QR');
     
-    const paragraphNode = editor.schema.nodes.paragraph.create({
-       style: 'text-align: right;' // Align to right like a signature usually is
-    }, imageNode);
+    const paragraphNode = editor.schema.nodes.paragraph.create(null, imageNode);
 
     // Insert QR code image at the end of the document
     // We use a transaction to insert the node directly

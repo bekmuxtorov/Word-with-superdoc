@@ -41,9 +41,9 @@ export const translateImageNode = (params) => {
   let size =
     attrs.size && attrs.size.width
       ? {
-          w: pixelsToEmu(attrs.size.width),
-          h: pixelsToEmu(attrs.size.height),
-        }
+        w: pixelsToEmu(attrs.size.width),
+        h: pixelsToEmu(attrs.size.height),
+      }
       : imageSize || { w: 0, h: 0 };
 
   if (originalWidth && originalHeight) {
@@ -150,6 +150,12 @@ export const translateImageNode = (params) => {
     }
   }
 
+  // Ensure unique numeric ID for the drawing object (required by Word)
+  // Use a random integer if attrs.id is missing or not a number
+  const drawingId = (attrs.id && Number.isInteger(Number(attrs.id)))
+    ? Number(attrs.id)
+    : Math.floor(Math.random() * 0x7FFFFFFF) + 1; // Ensure non-zero positive integer
+
   const drawingXmlns = 'http://schemas.openxmlformats.org/drawingml/2006/main';
   const pictureXmlns = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
 
@@ -170,7 +176,7 @@ export const translateImageNode = (params) => {
       {
         name: 'wp:docPr',
         attributes: {
-          id: attrs.id || 0,
+          id: drawingId,
           name: attrs.alt || `Picture ${imageName}`,
         },
       },
@@ -204,7 +210,7 @@ export const translateImageNode = (params) => {
                       {
                         name: 'pic:cNvPr',
                         attributes: {
-                          id: attrs.id || 0,
+                          id: drawingId,
                           name: attrs.title || `Picture ${imageName}`,
                         },
                       },
