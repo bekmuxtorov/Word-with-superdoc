@@ -112,7 +112,7 @@ const getRichTextExtensions = () => {
     TrackFormat,
     AiPlugin,
     Image,
-    NodeResizer,
+    // NodeResizer,
     CustomSelection,
     PassthroughInline,
     PassthroughBlock,
@@ -187,7 +187,7 @@ const getStarterExtensions = () => {
     StructuredContentCommands,
     DocumentSection,
     DocumentPartObject,
-    NodeResizer,
+    // NodeResizer, // Conficts with ImageResizeOverlay and blocks dragging
     CustomSelection,
     TextTransform,
     VectorShape,
