@@ -12,6 +12,29 @@
             text-align: right;
         }
 
+        .login-container {
+            max-width: 400px;
+            margin: 50px auto;
+            padding: 30px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            background-color: #f9f9f9;
+        }
+
+        .login-container h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .login-container input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
         button {
             padding: 10px 20px;
             font-size: 16px;
@@ -21,10 +44,27 @@
             border: none;
             border-radius: 5px;
             margin-bottom: 20px;
+            width: 100%;
         }
 
         button:hover {
             background-color: #0056b3;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .error {
+            color: red;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .info {
+            color: green;
+            text-align: center;
+            margin-bottom: 10px;
         }
 
         iframe {
@@ -37,65 +77,154 @@
 </head>
 
 <body>
-    <!-- <h1>SuperDoc Iframe</h1> -->
-    <button onclick="loadIframe()">Word</button>
-    <br>
-    <iframe id="superDocFrame" title="SuperDoc" style="display:none;"></iframe>
+    <!-- Login Form -->
+    <div id="loginContainer" class="login-container">
+        <h2>Kirish</h2>
+        <div id="errorMessage" class="error hidden"></div>
+        <input type="text" id="username" placeholder="Username" value="admin">
+        <input type="password" id="password" placeholder="Password" value="admin123">
+        <button onclick="login()">Kirish</button>
+    </div>
+
+    <!-- Main Content (after login) -->
+    <div id="mainContent" class="hidden">
+        <div id="infoMessage" class="info hidden"></div>
+        <button onclick="loadIframe()">Word</button>
+        <button onclick="logout()">Chiqish</button>
+        <br>
+        <iframe id="superDocFrame" title="SuperDoc" style="display:none;"></iframe>
+    </div>
 
     <script>
-        // Sahifa yuklanganda iframe holatini tekshirish
+        // Token boshqaruvi
+        function getAccessToken() {
+            return localStorage.getItem('access_token');
+        }
+
+        function setTokens(access, refresh) {
+            localStorage.setItem('access_token', access);
+            localStorage.setItem('refresh_token', refresh);
+        }
+
+        function clearTokens() {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+        }
+
+        // Sahifa yuklanganda token tekshirish
         window.addEventListener('DOMContentLoaded', function () {
-            const iframeState = localStorage.getItem('iframeOpen');
-            if (iframeState === 'true') {
-                // Avtomatik ochilishni o'chirish (yangi oyna uchun)
-                // loadIframe();
+            const token = getAccessToken();
+            if (token) {
+                document.getElementById('loginContainer').classList.add('hidden');
+                document.getElementById('mainContent').classList.remove('hidden');
             }
         });
 
-        var newWindow = null; // Yangi oynani saqlash uchun
-        function loadIframe() {
-            const url = 'http://localhost:9094/';
-            const windowFeatures = 'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no';
+        // Login funksiyasi
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('errorMessage');
 
-            newWindow = window.open(url, 'SuperDocWindow', windowFeatures);
-            localStorage.setItem('iframeOpen', 'true');
+            if (!username || !password) {
+                errorDiv.textContent = 'Username va parolni kiriting!';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
 
-            // Oyna yuklangandan keyin ma'lumot yuborish
-            if (newWindow) {
-                // Bir necha marta urinish (oyna yuklangunga qadar)
-                let attempts = 0;
-                const sendData = setInterval(function () {
-                    attempts++;
-                    if (attempts > 50) { // 5 soniya kutish
-                        clearInterval(sendData);
-                        console.log('Ma\'lumot yuborishda xatolik: vaqt tugadi');
-                        return;
-                    }
+            try {
+                const response = await fetch('http://192.168.1.240:8000/api/token/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password
+                    })
+                });
 
-                    try {
-                        var data = {
-                            data: 'http://localhost:8000/api/files/1/content/'
-                        };
+                if (response.ok) {
+                    const data = await response.json();
+                    setTokens(data.access, data.refresh);
 
-                        newWindow.postMessage(data, 'http://localhost:9094');
-                        console.log('Yuborildi:', data);
-
-                        // Muvaffaqiyatli yuborildi
-                        clearInterval(sendData);
-                    } catch (e) {
-                        // Hali yuklanyapti, qayta urinish
-                        console.log('Urinish #' + attempts);
-                    }
-                }, 100);
+                    // Login muvaffaqiyatli
+                    document.getElementById('loginContainer').classList.add('hidden');
+                    document.getElementById('mainContent').classList.remove('hidden');
+                    errorDiv.classList.add('hidden');
+                } else {
+                    errorDiv.textContent = 'Username yoki parol noto\'g\'ri!';
+                    errorDiv.classList.remove('hidden');
+                }
+            } catch (error) {
+                errorDiv.textContent = 'Server bilan bog\'lanishda xatolik!';
+                errorDiv.classList.remove('hidden');
+                console.error('Login error:', error);
             }
         }
 
-        // Yangi oynadan javob qabul qilish
-        window.addEventListener('message', function (event) {
-            // Xavfsizlik uchun origin tekshirish
-            if (event.origin !== 'http://localhost:9094') return;
+        // Logout funksiyasi
+        function logout() {
+            clearTokens();
+            document.getElementById('loginContainer').classList.remove('hidden');
+            document.getElementById('mainContent').classList.add('hidden');
+            location.reload();
+        }
 
-            console.log('Yangi oynadan kelgan javob:', event.data);
+        var newWindow = null;
+
+        // ✅ TUZATISH: Listener faqat bir marta qo'shiladi (tashqarida)
+        window.addEventListener('message', function (event) {
+            console.log('Parent received message:', event.data);
+
+            if (event.data && event.data.status === 'ready' && newWindow) {
+                console.log('✅ Child window tayyor! Ma\'lumot yuborilmoqda...');
+
+                const token = getAccessToken();
+
+                // Token'ni URL query parameter sifatida qo'shamiz
+                const inputUrl = `http://192.168.1.240:8000/api/files/2/content/`;
+                const outputUrl = `http://192.168.1.240:8000/api/files/2/content/`;
+
+                var data = {
+                    input_url: inputUrl,
+                    output_url: outputUrl,
+                    v3_ganiwer: token,  // Qo'shimcha xavfsizlik uchun
+                };
+
+                console.log('📤 Yuborilayotgan ma\'lumot:', {
+                    input_url: inputUrl,
+                    output_url: outputUrl,
+                    token_length: token ? token.length : 0
+                });
+                newWindow.postMessage(data, '*');
+            }
+
+            if (event.data && event.data.status === 'loaded') {
+                console.log('✅ Hujjat yuklandi:', event.data.url);
+            }
+        });
+
+        function loadIframe() {
+            const token = getAccessToken();
+            if (!token) {
+                alert('Iltimos, avval tizimga kiring!');
+                return;
+            }
+
+            // const url = 'http://localhost:9094/';
+            const url = 'http://89.249.60.4:9094/';
+
+            const windowFeatures = 'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no';
+
+            newWindow = window.open(url, 'SuperDocWindow', windowFeatures);
+        }
+
+        // Enter tugmasi bilan login
+        document.addEventListener('keypress', function (event) {
+            if (event.key === 'Enter' && !document.getElementById('loginContainer').classList.contains('hidden')) {
+                login();
+            }
         });
     </script>
 </body>
