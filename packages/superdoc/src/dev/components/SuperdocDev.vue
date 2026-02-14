@@ -56,6 +56,7 @@ const uploadDisplayName = computed(() => uploadedFileName.value || 'No file chos
 const isDragging = ref(false);
 const isMoreMenuOpen = ref(false);
 const isInIframe = ref(false);
+const isLoading = ref(false);
 
 const handleDragOver = (e) => {
   // Only handle file drags from OS
@@ -169,6 +170,7 @@ const handleLoadFromUrl = async () => {
   }
 
   isLoadingUrl.value = true;
+  isLoading.value = true;
   try {
     const token = getToken();
     console.log('Fetching document from:', url);
@@ -202,6 +204,7 @@ const handleLoadFromUrl = async () => {
     alert(`Failed to load document: ${message}`);
   } finally {
     isLoadingUrl.value = false;
+    isLoading.value = false;
   }
 };
 
@@ -925,6 +928,16 @@ if (scrollTestMode.value) {
     @dragover.prevent="handleDragOver"
     @dragleave.prevent="handleDragLeave"
   >
+    <!-- Loading Spinner Overlay -->
+    <div v-if="isLoading" class="dev-app__loading-overlay">
+      <div class="dev-app__spinner">
+        <svg class="dev-app__spinner-svg" viewBox="0 0 50 50">
+          <circle class="dev-app__spinner-circle" cx="25" cy="25" r="20" fill="none" stroke-width="4"></circle>
+        </svg>
+        <p class="dev-app__loading-text">Xujjat yuklanmoqda...</p>
+      </div>
+    </div>
+    
     <div class="dev-app__layout">
 
 
@@ -1406,6 +1419,73 @@ if (scrollTestMode.value) {
   .dev-app__view {
     padding-top: 10px;
     overflow-x: hidden;
+  }
+}
+</style>
+
+<style>
+/* Loading Spinner Styles */
+.dev-app__loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(4px);
+}
+
+.dev-app__spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.dev-app__spinner-svg {
+  width: 60px;
+  height: 60px;
+  animation: rotate 2s linear infinite;
+}
+
+.dev-app__spinner-circle {
+  stroke: #3b82f6;
+  stroke-linecap: round;
+  stroke-dasharray: 1, 150;
+  stroke-dashoffset: 0;
+  animation: dash 1.5s ease-in-out infinite;
+}
+
+.dev-app__loading-text {
+  color: white;
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+@keyframes rotate {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes dash {
+  0% {
+    stroke-dasharray: 1, 150;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -35;
+  }
+  100% {
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -124;
   }
 }
 </style>
