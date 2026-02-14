@@ -11,8 +11,25 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./utilities": {
+      "types": "./src/utilities.ts",
+      "default": "./src/utilities.ts"
+    },
+    "./utilities.js": {
+      "types": "./src/utilities.ts",
+      "default": "./src/utilities.ts"
+    },
+    "./converter-context": {
+      "types": "./src/converter-context.ts",
+      "default": "./src/converter-context.ts"
+    },
+    "./converter-context.js": {
+      "types": "./src/converter-context.ts",
+      "default": "./src/converter-context.ts"
+    },
     "./*": {
-      "source": "./src/*"
+      "types": "./src/*.ts",
+      "default": "./src/*.ts"
     }
   },
   "scripts": {
