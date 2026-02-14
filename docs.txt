@@ -1,0 +1,82 @@
+# Django File Management Tizimi Dokumentatsiyasi
+
+Ushbu hujjat loyihani o'rnatish, sozlash va API dan foydalanish bo'yicha to'liq qo'llanmani o'z ichiga oladi.
+
+## 1. Loyihani O'rnatish (Installation)
+
+Loyihani ishga tushirish uchun quyidagi qadamlarni bajaring:
+
+### Talablar
+- Python 3.8+
+- pip
+
+### Qadamlar:
+
+1.  **Virtual muhitni faollashtirish:**
+    ```bash
+    venv\Scripts\activate
+    ```
+
+2.  **Kerakli kutubxonalarni o'rnatish:**
+    ```bash
+    pip install django djangorestframework django-cors-headers
+    ```
+
+3.  **Migratsiyalarni amalga oshirish:**
+    ```bash
+    python manage.py makemigrations
+    python manage.py migrate
+    ```
+
+4.  **Superuser (Admin) yaratish:**
+    ```bash
+    python manage.py createsuperuser
+    ```
+
+5.  **Serverni ishga tushirish:**
+    ```bash
+    python manage.py runserver
+    ```
+
+---
+
+## 2. API Dokumentatsiyasi
+
+**Base URL:** `http://127.0.0.1:8000/api/`
+
+### 2.1. Asosiy Fayl Operatsiyalari (CRUD)
+**Auth:** Required (Basic Auth yoki Session)
+
+-   **List:** `GET /api/files/`
+-   **Create:** `POST /api/files/` (Body: `file`)
+-   **Retrieve:** `GET /api/files/<id>/` (JSON qaytaradi)
+-   **Update:** `PUT`/`PATCH` `/api/files/<id>/` (JSON qaytaradi)
+-   **Delete:** `DELETE /api/files/<id>/`
+
+### 2.2. Fayl Tarkibi Bilan Ishlash (Direct Content Access)
+
+Faylning o'zini to'g'ridan-to'g'ri yuklab olish yoki yangilash uchun maxsus endpoint.
+**Auth:** Talab qilinmaydi (Public Access) (GET va UPDATE uchun ham).
+
+**/api/files/<id>/content/**
+
+#### Faylni Yuklab Olish (Download)
+-   **URL:** `/api/files/<id>/content/`
+-   **Method:** `GET`
+-   **Response:** Faylning o'zi (stream).
+
+**Misol (cURL):**
+```bash
+curl -O -J http://127.0.0.1:8000/api/files/1/content/
+```
+
+#### Faylni Yangilash (Update Content)
+-   **URL:** `/api/files/<id>/content/`
+-   **Method:** `PUT` yoki `PATCH`
+-   **Content-Type:** `multipart/form-data`
+-   **Body:** `file`
+
+**Misol (cURL):**
+```bash
+curl -X PUT -F "file=@/path/to/new_file.pdf" http://127.0.0.1:8000/api/files/1/content/
+```

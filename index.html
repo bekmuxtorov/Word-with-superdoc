@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ekomplektasiya.uz</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            text-align: right;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        iframe {
+            width: 100%;
+            height: 800px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- <h1>SuperDoc Iframe</h1> -->
+    <button onclick="loadIframe()">Word</button>
+    <br>
+    <iframe id="superDocFrame" title="SuperDoc" style="display:none;"></iframe>
+
+    <script>
+        // Sahifa yuklanganda iframe holatini tekshirish
+        window.addEventListener('DOMContentLoaded', function () {
+            const iframeState = localStorage.getItem('iframeOpen');
+            if (iframeState === 'true') {
+                // Avtomatik ochilishni o'chirish (yangi oyna uchun)
+                // loadIframe();
+            }
+        });
+
+        var newWindow = null; // Yangi oynani saqlash uchun
+        function loadIframe() {
+            const url = 'http://localhost:9094/';
+            const windowFeatures = 'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no';
+
+            newWindow = window.open(url, 'SuperDocWindow', windowFeatures);
+            localStorage.setItem('iframeOpen', 'true');
+
+            // Oyna yuklangandan keyin ma'lumot yuborish
+            if (newWindow) {
+                // Bir necha marta urinish (oyna yuklangunga qadar)
+                let attempts = 0;
+                const sendData = setInterval(function () {
+                    attempts++;
+                    if (attempts > 50) { // 5 soniya kutish
+                        clearInterval(sendData);
+                        console.log('Ma\'lumot yuborishda xatolik: vaqt tugadi');
+                        return;
+                    }
+
+                    try {
+                        var data = {
+                            data: 'http://localhost:8000/api/files/1/content/'
+                        };
+
+                        newWindow.postMessage(data, 'http://localhost:9094');
+                        console.log('Yuborildi:', data);
+
+                        // Muvaffaqiyatli yuborildi
+                        clearInterval(sendData);
+                    } catch (e) {
+                        // Hali yuklanyapti, qayta urinish
+                        console.log('Urinish #' + attempts);
+                    }
+                }, 100);
+            }
+        }
+
+        // Yangi oynadan javob qabul qilish
+        window.addEventListener('message', function (event) {
+            // Xavfsizlik uchun origin tekshirish
+            if (event.origin !== 'http://localhost:9094') return;
+
+            console.log('Yangi oynadan kelgan javob:', event.data);
+        });
+    </script>
+</body>
+
+</html>
