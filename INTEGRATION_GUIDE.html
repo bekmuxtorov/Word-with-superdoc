@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuperDoc Integration Guide - Texnik Dokumentatsiya</title>
+    <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --dark: #1f2937;
+            --light: #f9fafb;
+            --code-bg: #2d3748;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--dark);
+            background: var(--light);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        /* Header */
+        header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            padding: 60px 20px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        header h1 {
+            font-size: 48px;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+
+        header p {
+            font-size: 20px;
+            opacity: 0.95;
+            margin: 0;
+        }
+
+        .developer-badge {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .developer-badge::before {
+            content: "👨‍💻";
+            font-size: 18px;
+        }
+
+        /* Navigation */
+        nav {
+            background: white;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            padding: 15px 0;
+        }
+
+        nav ul {
+            list-style: none;
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+
+        nav a {
+            color: var(--dark);
+            text-decoration: none;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.3s;
+        }
+
+        nav a:hover {
+            background: var(--primary);
+            color: white;
+        }
+
+        /* Section Styles */
+        section {
+            background: white;
+            margin: 30px 0;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        h2 {
+            font-size: 32px;
+            color: var(--primary);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid var(--primary);
+        }
+
+        h3 {
+            font-size: 24px;
+            color: var(--secondary);
+            margin: 25px 0 15px;
+        }
+
+        h4 {
+            font-size: 18px;
+            color: var(--dark);
+            margin: 20px 0 10px;
+        }
+
+        p {
+            margin-bottom: 15px;
+            text-align: justify;
+        }
+
+        /* Code Blocks */
+        pre {
+            background: var(--code-bg);
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 20px 0;
+            border-left: 4px solid var(--primary);
+        }
+
+        code {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+        }
+
+        .inline-code {
+            background: #e5e7eb;
+            color: var(--danger);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+        }
+
+        /* Alert Boxes */
+        .alert {
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid;
+        }
+
+        .alert-info {
+            background: #dbeafe;
+            border-color: #3b82f6;
+            color: #1e40af;
+        }
+
+        .alert-success {
+            background: #d1fae5;
+            border-color: var(--success);
+            color: #065f46;
+        }
+
+        .alert-warning {
+            background: #fef3c7;
+            border-color: var(--warning);
+            color: #92400e;
+        }
+
+        .alert-danger {
+            background: #fee2e2;
+            border-color: var(--danger);
+            color: #991b1b;
+        }
+
+        /* Steps */
+        .steps {
+            counter-reset: step;
+        }
+
+        .step {
+            position: relative;
+            padding: 20px;
+            padding-left: 80px;
+            margin-bottom: 20px;
+            background: #f9fafb;
+            border-radius: 8px;
+            counter-increment: step;
+        }
+
+        .step::before {
+            content: counter(step);
+            position: absolute;
+            left: 20px;
+            top: 20px;
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #e5e7eb;
+        }
+
+        th {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background: #f9fafb;
+        }
+
+        /* Demo Button */
+        .demo-btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: transform 0.3s;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .demo-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        /* Footer */
+        footer {
+            background: var(--dark);
+            color: white;
+            text-align: center;
+            padding: 30px 20px;
+            margin-top: 50px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header -->
+    <header>
+        <h1>📚 SuperDoc Integration Guide</h1>
+        <p>PostMessage API orqali Word hujjatlarni yuklash va saqlash bo'yicha to'liq qo'llanma</p>
+        <div class="developer-badge">Developer: Asadbek Muxtorov</div>
+    </header>
+
+    <!-- Navigation -->
+    <nav>
+        <ul>
+            <li><a href="#overview">Umumiy Ma'lumot</a></li>
+            <li><a href="#architecture">Arxitektura</a></li>
+            <li><a href="#api">API Reference</a></li>
+            <li><a href="#integration">Integratsiya</a></li>
+            <li><a href="#examples">Misollar</a></li>
+            <li><a href="#demo">Demo</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <!-- Overview Section -->
+        <section id="overview">
+            <h2>📖 Umumiy Ma'lumot</h2>
+            <p>
+                SuperDoc - bu zamonaviy Word hujjatlarni browser ichida tahrirlash uchun mo'ljallangan yechim.
+                Ushbu tizim <span class="inline-code">postMessage</span> API orqali parent window bilan aloqa
+                o'rnatadi va dinamik ravishda hujjatlarni yuklash va saqlash imkoniyatini beradi.
+            </p>
+
+            <div class="alert alert-info">
+                <strong>🎯 Asosiy Maqsad:</strong> Backend server'dan Word hujjatni yuklash, tahrirlash va
+                o'zgarishlarni qayta saqlash jarayonini to'liq avtomatlashtirish.
+            </div>
+
+            <h3>🌟 Asosiy Xususiyatlar</h3>
+            <ul style="margin-left: 20px;">
+                <li>✅ PostMessage orqali dinamik URL konfiguratsiyasi</li>
+                <li>✅ JWT token autentifikatsiyasi</li>
+                <li>✅ Real-time hujjat yuklash va saqlash</li>
+                <li>✅ Loading spinner bilan foydalanuvchi tajribasi</li>
+                <li>✅ Xatoliklarni boshqarish va xabar berish</li>
+                <li>✅ Crossorigin window kommunikatsiyasi</li>
+            </ul>
+        </section>
+
+        <!-- Architecture Section -->
+        <section id="architecture">
+            <h2>🏗️ Arxitektura</h2>
+
+            <h3>Kommunikatsiya Sxemasi</h3>
+            <pre><code>┌─────────────────┐                    ┌──────────────────┐
+│  Parent Window  │ ─── postMessage ──>│  SuperDoc Child  │
+│  (doc.html)     │ <── postMessage ───│  (localhost:9094)│
+└─────────────────┘                    └──────────────────┘
+        │                                        │
+        │                                        │
+        ▼                                        ▼
+┌─────────────────┐                    ┌──────────────────┐
+│  Backend API    │ <───── fetch ──────│   Document File  │
+│  (Django/DRF)   │ ─────> blob ──────>│   Processing     │
+└─────────────────┘                    └──────────────────┘</code></pre>
+
+            <h3>Ma'lumot Oqimi</h3>
+            <div class="steps">
+                <div class="step">
+                    <h4>Parent Window Ochiladi</h4>
+                    <p>Foydalanuvchi "Word Hujjatni Ochish" tugmasini bosadi</p>
+                </div>
+                <div class="step">
+                    <h4>Child Window Ready Signal</h4>
+                    <p>SuperDoc window yuklangach <code>{ status: 'ready' }</code> yuboradi</p>
+                </div>
+                <div class="step">
+                    <h4>Ma'lumot Yuborish</h4>
+                    <p>Parent window hujjat URL va token yuboradi</p>
+                </div>
+                <div class="step">
+                    <h4>Hujjat Yuklash</h4>
+                    <p>SuperDoc backend'dan hujjatni fetch qiladi</p>
+                </div>
+                <div class="step">
+                    <h4>Tahrirlash</h4>
+                    <p>Foydalanuvchi hujjatni tahrirlay oladi</p>
+                </div>
+                <div class="step">
+                    <h4>Saqlash</h4>
+                    <p>O'zgarishlar PUT request orqali backend'ga saqlanadi</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- API Reference Section -->
+        <section id="api">
+            <h2>🔌 API Reference</h2>
+
+            <h3>PostMessage Data Format</h3>
+            <p>Parent window quyidagi formatda ma'lumot yuborishi kerak:</p>
+
+            <pre><code>{
+    "input_url": "http://localhost:8000/api/files/2/content/",
+    "output_url": "http://localhost:8000/api/files/2/content/",
+    "v3_ganiwer": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}</code></pre>
+
+            <h3>Parametrlar</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Tip</th>
+                        <th>Tavsif</th>
+                        <th>Majburiy</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>input_url</code></td>
+                        <td>string</td>
+                        <td>Hujjatni yuklash uchun backend URL</td>
+                        <td>✅ Ha</td>
+                    </tr>
+                    <tr>
+                        <td><code>output_url</code></td>
+                        <td>string</td>
+                        <td>Hujjatni saqlash uchun backend URL</td>
+                        <td>✅ Ha</td>
+                    </tr>
+                    <tr>
+                        <td><code>v3_ganiwer</code></td>
+                        <td>string</td>
+                        <td>JWT access token (autentifikatsiya)</td>
+                        <td>✅ Ha</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="alert alert-warning">
+                <strong>⚠️ Diqqat:</strong> Token mutlaqo zarur! Backend API himoyalangan va har bir request uchun
+                <code>Authorization: Bearer {token}</code> header talab qilinadi.
+            </div>
+
+            <h3>Status Messages</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Yo'nalish</th>
+                        <th>Ma'nosi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>{ status: 'ready' }</code></td>
+                        <td>Child → Parent</td>
+                        <td>SuperDoc tayyor, ma'lumot yuborish mumkin</td>
+                    </tr>
+                    <tr>
+                        <td><code>{ status: 'loaded', url: '...' }</code></td>
+                        <td>Child → Parent</td>
+                        <td>Hujjat muvaffaqiyatli yuklandi</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Integration Section -->
+        <section id="integration">
+            <h2>⚙️ Integratsiya Qo'llanmasi</h2>
+
+            <h3>1️⃣ Parent Window Sozlash</h3>
+            <pre><code>var newWindow = null;
+
+// PostMessage listener (faqat bir marta qo'shiladi)
+window.addEventListener('message', function (event) {
+    console.log('Parent received message:', event.data);
+
+    // Child window tayyor bo'lganda
+    if (event.data && event.data.status === 'ready' && newWindow) {
+        console.log('✅ Child window tayyor!');
+        
+        const token = getAccessToken(); // Tokenni olish
+        
+        var data = {
+            input_url: 'http://localhost:8000/api/files/2/content/',
+            output_url: 'http://localhost:8000/api/files/2/content/',
+            v3_ganiwer: token,
+        };
+
+        newWindow.postMessage(data, '*');
+    }
+
+    // Hujjat yuklanganda
+    if (event.data && event.data.status === 'loaded') {
+        console.log('✅ Hujjat yuklandi:', event.data.url);
+    }
+});
+
+// Yangi oyna ochish
+function openEditor() {
+    const url = 'http://localhost:9094/';
+    const features = 'width=1200,height=800';
+    
+    newWindow = window.open(url, 'SuperDocWindow', features);
+}</code></pre>
+
+            <div class="alert alert-danger">
+                <strong>❌ Xato:</strong> Listener'ni <code>openEditor()</code> funksiyasi ichida qo'shmang!
+                Bu har safar yangi listener yaratadi va duplicate message'lar keladi.
+            </div>
+
+            <h4>Window.open() Features Parametri</h4>
+            <p>Uchinchi parameter - <code>windowFeatures</code> - yangi oynaning ko'rinishini sozlaydi:</p>
+
+            <pre><code>const features = 'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no';
+newWindow = window.open(url, 'SuperDocWindow', features);</code></pre>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Tavsif</th>
+                        <th>Qiymatlar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>width</code></td>
+                        <td>Oyna kengligi (pikselda)</td>
+                        <td>Raqam, masalan: <code>1200</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>height</code></td>
+                        <td>Oyna balandligi (pikselda)</td>
+                        <td>Raqam, masalan: <code>800</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>menubar</code></td>
+                        <td>Browser menyu barini ko'rsatish</td>
+                        <td><code>yes</code> / <code>no</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>toolbar</code></td>
+                        <td>Browser toolbar'ni (back, forward, ...) ko'rsatish</td>
+                        <td><code>yes</code> / <code>no</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>location</code></td>
+                        <td>URL address bar'ni ko'rsatish</td>
+                        <td><code>yes</code> / <code>no</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>status</code></td>
+                        <td>Pastki status bar'ni ko'rsatish</td>
+                        <td><code>yes</code> / <code>no</code></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="alert alert-info">
+                <strong>💡 Tavsiya:</strong> Document tahrirlash uchun
+                <code>menubar=no,toolbar=no,location=no,status=no</code>
+                qo'yish tavsiya etiladi - bu foydalanuvchini chalg'itmaydi va oyna toza ko'rinadi.
+            </div>
+
+            <h3>2️⃣ Backend API Endpoints</h3>
+
+            <h4>Hujjatni Yuklash (GET)</h4>
+            <pre><code>GET /api/files/{id}/content/
+Authorization: Bearer {token}
+
+Response: binary/octet-stream (Word fayl)</code></pre>
+
+            <h4>Hujjatni Saqlash (PUT)</h4>
+            <pre><code>PUT /api/files/{id}/content/
+Authorization: Bearer {token}
+Content-Type: multipart/form-data
+
+Body: FormData with 'file' field
+
+Response Codes:
+  200-299: Muvaffaqiyat
+  401: Token eskirgan / noto'g'ri
+  403: Ruxsat yo'q
+  601: Hujjat imzolangan (o'zgartirib bo'lmaydi)</code></pre>
+
+            <h3>3️⃣ Token Boshqaruvi</h3>
+            <pre><code>function getAccessToken() {
+    // localStorage'dan olish
+    return localStorage.getItem('access_token');
+}
+
+function setTokens(access, refresh) {
+    localStorage.setItem('access_token', access);
+    localStorage.setItem('refresh_token', refresh);
+}
+
+// Login qilish
+async function login(username, password) {
+    const response = await fetch('http://localhost:8000/api/token/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+    });
+    
+    const data = await response.json();
+    setTokens(data.access, data.refresh);
+}</code></pre>
+        </section>
+
+        <!-- Examples Section -->
+        <section id="examples">
+            <h2>💡 To'liq Misol</h2>
+
+            <h3>Minimal Parent HTML</h3>
+            <pre><code>&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+    &lt;title&gt;SuperDoc Demo&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;button onclick="openDoc()"&gt;Hujjatni Ochish&lt;/button&gt;
+
+    &lt;script&gt;
+        var newWindow = null;
+        
+        // Listener faqat bir marta
+        window.addEventListener('message', function(event) {
+            if (event.data?.status === 'ready' && newWindow) {
+                newWindow.postMessage({
+                    input_url: 'http://localhost:8000/api/files/1/content/',
+                    output_url: 'http://localhost:8000/api/files/1/content/',
+                    v3_ganiwer: 'YOUR_JWT_TOKEN_HERE'
+                }, '*');
+            }
+        });
+        
+        function openDoc() {
+            newWindow = window.open(
+                'http://localhost:9094/',
+                'SuperDoc',
+                'width=1200,height=800'
+            );
+        }
+    &lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+
+            <div class="alert alert-success">
+                <strong>✅ To'g'ri yondashuv:</strong> Listener global scope'da, faqat bir marta qo'shilgan.
+                Window ochish funksiyasi listener qo'shmaydi.
+            </div>
+
+            <h3>React/Vue Integratsiyasi</h3>
+            <pre><code>// React Component
+useEffect(() => {
+    const handleMessage = (event) => {
+        if (event.data?.status === 'ready' && docWindow) {
+            docWindow.postMessage({
+                input_url: `${API_URL}/files/${fileId}/content/`,
+                output_url: `${API_URL}/files/${fileId}/content/`,
+                v3_ganiwer: authToken
+            }, '*');
+        }
+    };
+    
+    window.addEventListener('message', handleMessage);
+    
+    return () => {
+        window.removeEventListener('message', handleMessage);
+    };
+}, [docWindow, fileId, authToken]);</code></pre>
+        </section>
+
+        <!-- Demo Section -->
+        <section id="demo">
+            <h2>🚀 Demo</h2>
+            <p>Quyidagi tugmani bosib to'liq ishlaydigan demo ko'ring:</p>
+
+            <button class="demo-btn" onclick="openDemo()">📝 Demo Ochish</button>
+
+            <div class="alert alert-info" style="margin-top: 20px;">
+                <strong>ℹ️ Izoh:</strong> Demo ishlashi uchun:
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>✓ SuperDoc server (localhost:9094) ishlab turishi kerak</li>
+                    <li>✓ Backend API (localhost:8000) ishlab turishi kerak</li>
+                    <li>✓ To'g'ri JWT token bo'lishi kerak</li>
+                </ul>
+            </div>
+        </section>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <p>&copy; 2026 EKomplektasiya. Barcha huquqlar himoyalangan.</p>
+        <p style="margin-top: 10px; opacity: 0.8;">SuperDoc Integration Guide v1.0</p>
+    </footer>
+
+    <script>
+        // Demo funksiyasi
+        var demoWindow = null;
+
+        window.addEventListener('message', function (event) {
+            console.log('📨 Message received:', event.data);
+
+            if (event.data?.status === 'ready' && demoWindow) {
+                console.log('✅ Sending data to SuperDoc...');
+
+                // Demo uchun test token (o'zingiznikini qo'ying)
+                demoWindow.postMessage({
+                    input_url: 'http://localhost:8000/api/files/2/content/',
+                    output_url: 'http://localhost:8000/api/files/2/content/',
+                    v3_ganiwer: 'DEMO_TOKEN_REPLACE_WITH_REAL_ONE'
+                }, '*');
+            }
+
+            if (event.data?.status === 'loaded') {
+                console.log('✅ Document loaded:', event.data.url);
+                alert('✅ Hujjat muvaffaqiyatli yuklandi!');
+            }
+        });
+
+        function openDemo() {
+            if (!demoWindow || demoWindow.closed) {
+                demoWindow = window.open(
+                    'http://localhost:9094/',
+                    'SuperDocDemo',
+                    'width=1200,height=800,menubar=no,toolbar=no'
+                );
+
+                if (!demoWindow) {
+                    alert('❌ Popup blocker tomonidan bloklangan! Iltimos popup\'larga ruxsat bering.');
+                }
+            } else {
+                demoWindow.focus();
+            }
+        }
+
+        // Smooth scroll to anchors
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

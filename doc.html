@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EKomplektasiya - Hujjat Tahrirlash</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        /* Login Container Styles */
+        .login-container {
+            background: white;
+            max-width: 420px;
+            width: 100%;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .login-container h2 {
+            text-align: center;
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        .login-container p {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .input-group {
+            position: relative;
+            margin-bottom: 25px;
+        }
+
+        .input-group label {
+            display: block;
+            color: #555;
+            font-size: 14px;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 15px;
+            transition: all 0.3s ease;
+            background: #f8f9fa;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            text-align: center;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            border: 1px solid #fcc;
+            animation: shake 0.5s;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+
+        .info {
+            background: #e7f5e8;
+            color: #2d5f2e;
+            text-align: center;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            border: 1px solid #b8e6b9;
+        }
+
+        /* Main Content Styles */
+        .main-content {
+            background: white;
+            max-width: 1200px;
+            width: 100%;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header h1::before {
+            content: "📄";
+            font-size: 30px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 12px 24px;
+            width: auto;
+            margin: 0;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            padding: 12px 24px;
+            width: auto;
+            margin: 0;
+        }
+
+        .info-panel {
+            background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .info-panel h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .info-panel p {
+            color: #555;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+
+        /* Loading Spinner */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: white;
+            font-size: 18px;
+            margin-top: 20px;
+            position: absolute;
+            top: 55%;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div>
+            <div class="spinner"></div>
+            <div class="loading-text">Hujjat yuklanmoqda...</div>
+        </div>
+    </div>
+
+    <!-- Login Form -->
+    <div id="loginContainer" class="login-container">
+        <h2>🔐 Kirish</h2>
+        <p>Hujjatlar bilan ishlash uchun tizimga kiring</p>
+        
+        <div id="errorMessage" class="error hidden"></div>
+        
+        <div class="input-group">
+            <label for="username">Foydalanuvchi nomi</label>
+            <input type="text" id="username" placeholder="Username kiriting" value="admin">
+        </div>
+        
+        <div class="input-group">
+            <label for="password">Parol</label>
+            <input type="password" id="password" placeholder="Parol kiriting" value="admin123">
+        </div>
+        
+        <button onclick="login()">🚀 Kirish</button>
+    </div>
+
+    <!-- Main Content (after login) -->
+    <div id="mainContent" class="main-content hidden">
+        <div class="header">
+            <h1>Hujjat Tahrirlash Tizimi</h1>
+            <div class="btn-group">
+                <button class="btn-primary" onclick="loadIframe()">📝 Word Hujjatni Ochish</button>
+                <button class="btn-secondary" onclick="logout()">🚪 Chiqish</button>
+            </div>
+        </div>
+
+        <div class="info-panel">
+            <h3>ℹ️ Qo'llanma</h3>
+            <p>
+                <strong>1.</strong> "Word Hujjatni Ochish" tugmasini bosing<br>
+                <strong>2.</strong> Yangi oynada hujjat tahrirlash muhiti ochiladi<br>
+                <strong>3.</strong> O'zgartirishlarni bajaring va saqlash tugmasini bosing<br>
+                <strong>4.</strong> O'zgarishlar avtomatik ravishda serverga saqlanadi
+            </p>
+        </div>
+
+        <div id="infoMessage" class="info hidden"></div>
+    </div>
+
+    <script>
+        /* ================================
+           TOKEN BOSHQARUVI
+        ================================ */
+        function getAccessToken() {
+            return localStorage.getItem('access_token');
+        }
+
+        function setTokens(access, refresh) {
+            localStorage.setItem('access_token', access);
+            localStorage.setItem('refresh_token', refresh);
+        }
+
+        function clearTokens() {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+        }
+
+        /* ================================
+           SAHIFA YUKLANGANDA
+        ================================ */
+        window.addEventListener('DOMContentLoaded', function () {
+            const token = getAccessToken();
+            if (token) {
+                document.getElementById('loginContainer').classList.add('hidden');
+                document.getElementById('mainContent').classList.remove('hidden');
+                document.body.style.background = '#f5f7fa';
+            }
+        });
+
+        /* ================================
+           LOGIN FUNKSIYASI
+        ================================ */
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('errorMessage');
+
+            if (!username || !password) {
+                errorDiv.textContent = '⚠️ Username va parolni kiriting!';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                document.getElementById('loadingOverlay').classList.remove('hidden');
+                
+                const response = await fetch('http://localhost:8000/api/token/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    setTokens(data.access, data.refresh);
+
+                    // Login muvaffaqiyatli
+                    document.getElementById('loginContainer').classList.add('hidden');
+                    document.getElementById('mainContent').classList.remove('hidden');
+                    document.body.style.background = '#f5f7fa';
+                    errorDiv.classList.add('hidden');
+                } else {
+                    errorDiv.textContent = '❌ Username yoki parol noto\'g\'ri!';
+                    errorDiv.classList.remove('hidden');
+                }
+            } catch (error) {
+                errorDiv.textContent = '🔌 Server bilan bog\'lanishda xatolik!';
+                errorDiv.classList.remove('hidden');
+                console.error('Login error:', error);
+            } finally {
+                document.getElementById('loadingOverlay').classList.add('hidden');
+            }
+        }
+
+        /* ================================
+           LOGOUT FUNKSIYASI
+        ================================ */
+        function logout() {
+            if (confirm('Tizimdan chiqmoqchimisiz?')) {
+                clearTokens();
+                document.getElementById('loginContainer').classList.remove('hidden');
+                document.getElementById('mainContent').classList.add('hidden');
+                document.body.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                location.reload();
+            }
+        }
+
+        /* ================================
+           POSTMESSAGE HANDLER
+        ================================ */
+        var newWindow = null;
+
+        // ✅ Listener faqat bir marta qo'shiladi
+        window.addEventListener('message', function (event) {
+            console.log('📨 Parent received message:', event.data);
+
+            // Child window tayyor bo'lganda data yuborish
+            if (event.data && event.data.status === 'ready' && newWindow) {
+                console.log('✅ Child window tayyor! Ma\'lumot yuborilmoqda...');
+
+                const token = getAccessToken();
+                var data = {
+                    input_url: 'http://localhost:8000/api/files/2/content/',
+                    output_url: 'http://localhost:8000/api/files/2/content/',
+                    v3_ganiwer: token,
+                };
+
+                console.log('📤 Yuborilayotgan ma\'lumot:', data);
+                newWindow.postMessage(data, '*');
+
+                // Loading overlay ni ko'rsatish
+                document.getElementById('loadingOverlay').classList.remove('hidden');
+                document.querySelector('.loading-text').textContent = 'Hujjat yuklanmoqda...';
+            }
+
+            // Hujjat yuklanganda
+            if (event.data && event.data.status === 'loaded') {
+                console.log('✅ Hujjat yuklandi:', event.data.url);
+                document.getElementById('loadingOverlay').classList.add('hidden');
+                
+                const infoDiv = document.getElementById('infoMessage');
+                infoDiv.textContent = '✅ Hujjat muvaffaqiyatli yuklandi va tahrirlash uchun tayyor!';
+                infoDiv.classList.remove('hidden');
+                
+                setTimeout(() => {
+                    infoDiv.classList.add('hidden');
+                }, 5000);
+            }
+        });
+
+        /* ================================
+           WORD OYNANI OCHISH
+        ================================ */
+        function loadIframe() {
+            const token = getAccessToken();
+            if (!token) {
+                alert('⚠️ Iltimos, avval tizimga kiring!');
+                return;
+            }
+
+            const url = 'http://localhost:9094/';
+            const windowFeatures = 'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no';
+
+            console.log('🚀 Yangi oyna ochilmoqda...');
+            newWindow = window.open(url, 'SuperDocWindow', windowFeatures);
+
+            if (!newWindow) {
+                alert('❌ Oyna ochilmadi! Popup blocker\'ni o\'chiring.');
+            }
+        }
+
+        /* ================================
+           ENTER TUGMASI BILAN LOGIN
+        ================================ */
+        document.addEventListener('keypress', function (event) {
+            if (event.key === 'Enter' && !document.getElementById('loginContainer').classList.contains('hidden')) {
+                login();
+            }
+        });
+    </script>
+</body>
+
+</html>
