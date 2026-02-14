@@ -776,7 +776,18 @@ export class SuperDoc extends EventEmitter {
     if (!type) return;
 
     type = type.toLowerCase();
+
+    // Normalize localized modes to internal keys
+    if (type === 'tahrirlash') type = 'editing';
+    if (type.includes("ko'rish") || type.includes('korish')) type = 'viewing';
+
     this.config.documentMode = type;
+
+    if (this.config.onDocumentModeChange) {
+      this.config.onDocumentModeChange(type);
+    }
+    this.emit('document-mode-change', type);
+
     this.#syncViewingVisibility();
 
     const types = {

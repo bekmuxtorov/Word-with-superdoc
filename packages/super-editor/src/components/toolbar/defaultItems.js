@@ -901,12 +901,12 @@ export const makeDefaultItems = ({
       icon: toolbarIcons.documentEditingMode,
       description: toolbarTexts.documentEditingModeDescription,
     },
-    {
-      label: toolbarTexts.documentSuggestingMode,
-      value: 'suggesting',
-      icon: toolbarIcons.documentSuggestingMode,
-      description: toolbarTexts.documentSuggestingModeDescription,
-    },
+    // {
+    //   label: toolbarTexts.documentSuggestingMode,
+    //   value: 'suggesting',
+    //   icon: toolbarIcons.documentSuggestingMode,
+    //   description: toolbarTexts.documentSuggestingModeDescription,
+    // },
     {
       label: toolbarTexts.documentViewingMode,
       value: 'viewing',
@@ -921,9 +921,18 @@ export const makeDefaultItems = ({
       options: optionsAfterRole,
       onSelect: (item) => {
         closeDropdown(renderDocumentButton);
-        const { label, icon } = item;
-        documentMode.label.value = label;
-        documentMode.icon.value = icon;
+        const { label } = item;
+
+        // Swap label/icon for toggle effect
+        let displayItem = item;
+        if (item.value === 'editing') {
+          displayItem = documentOptions.find(o => o.value === 'viewing') || item;
+        } else if (item.value === 'viewing') {
+          displayItem = documentOptions.find(o => o.value === 'editing') || item;
+        }
+
+        documentMode.label.value = displayItem.label;
+        documentMode.icon.value = displayItem.icon;
         superToolbar.emitCommand({ item: documentMode, argument: label });
       },
     });

@@ -19,6 +19,7 @@ import SidebarFieldAnnotations from './sidebar/SidebarFieldAnnotations.vue';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
 import QRCodeImage from '../../assets/qr.png';
+import CustomModal from './CustomModal.vue';
 
 // note:
 // Or set worker globally outside the component.
@@ -57,6 +58,21 @@ const isDragging = ref(false);
 const isMoreMenuOpen = ref(false);
 const isInIframe = ref(false);
 const isLoading = ref(false);
+const documentMode = ref('viewing'); // Default to viewing
+
+
+// Modal state
+const isModalVisible = ref(false);
+const modalTitle = ref('');
+const modalMessage = ref('');
+const modalType = ref('info');
+
+const showModal = (title, message, type = 'info') => {
+  modalTitle.value = title;
+  modalMessage.value = message;
+  modalType.value = type;
+  isModalVisible.value = true;
+};
 
 const handleDragOver = (e) => {
   // Only handle file drags from OS
@@ -201,7 +217,7 @@ const handleLoadFromUrl = async () => {
   } catch (err) {
     console.error('Failed to load from URL:', err);
     const message = err instanceof Error ? err.message : String(err);
-    alert(`Failed to load document: ${message}`);
+    showModal('Xatolik', `Hujjat yuklanmadi: ${message}`, 'error');
   } finally {
     isLoadingUrl.value = false;
     isLoading.value = false;
@@ -311,7 +327,12 @@ const init = async () => {
     toolbar: 'toolbar',
     toolbarGroups: ['center'],
     role: userRole,
-    documentMode: 'editing',
+    role: userRole,
+    documentMode: documentMode.value,
+    onDocumentModeChange: (mode) => {
+      documentMode.value = mode;
+      console.log('Document mode changed to:', mode);
+    },
     licenseKey: 'public_license_key_superdocinternal_ad7035140c4b',
     telemetry: {
       enabled: true,
@@ -571,9 +592,7 @@ const handleSendFile = async () => {
   const token = getToken();
 
   if (!id) {
-    alert(
-      "Fayl ID si topilmadi! Iltimos, 'Load URL' maydoniga to'g'ri URL kiriting (masalan: .../api/files/1/content).",
-    );
+    showModal('Xatolik', "Fayl ID si topilmadi! Iltimos, 'Load URL' maydoniga to'g'ri URL kiriting.", 'error');
     return;
   }
 
@@ -607,7 +626,7 @@ const handleSendFile = async () => {
     const blob = await superdoc.value.export({ commentsType: 'external', triggerDownload: false });
 
     if (!blob || blob.size === 0) {
-      alert("Fayl o'qilmadi yoki bo'sh.");
+      showModal('Xatolik', "Fayl o'qilmadi yoki bo'sh.", 'error');
       return;
     }
 
@@ -626,23 +645,23 @@ const handleSendFile = async () => {
     });
 
     if (response.status === 601) {
-      alert("Xujjat imzolangan, uni o'zgartirish imkoni mavjud emas.");
+      showModal('Xatolik', "Xujjat imzolangan, uni o'zgartirish imkoni mavjud emas.", 'error');
     } else if (response.status === 403) {
-      alert("Xujjatni o'zgartirish ruxsati sizda mavjud emas!");
+      showModal('Ruxsat yo\'q', "Xujjatni o'zgartirish ruxsati sizda mavjud emas!", 'error');
     } else if (response.status >= 200 && response.status < 300) {
-      alert('Xujjat fayli muaffaqiyatli yuborildi.');
+      showModal('Muaffaqiyat!', 'Xujjat fayli muaffaqiyatli saqlandi.', 'success');
     } else if (response.status >= 402) {
       const text = await response.text();
-      alert(text);
+      showModal('Xatolik', text, 'error');
     } else if (response.status >= 401) {
-      alert('Fayl topilmadi yoki token eskirgan!');
+      showModal('Xatolik', 'Fayl topilmadi yoki token eskirgan!', 'error');
     } else {
       const text = await response.text();
-      alert(`❌ Xatolik! Status: ${response.status}\n${text}`);
+      showModal('Xatolik', `Status: ${response.status}\n${text}`, 'error');
     }
   } catch (err) {
     console.error('Send error:', err);
-    alert(`Umumiy xatolik yuz berdi: ${err.message}`);
+    showModal('Xatolik', `Umumiy xatolik yuz berdi: ${err.message}`, 'error');
   } finally {
     isSending.value = false;
   }
@@ -956,7 +975,13 @@ if (scrollTestMode.value) {
         <div class="dev-app__toolbar-row">
           <div id="toolbar" class="sd-toolbar"></div>
     <div class="dev-app__toolbar-actions">
-            <button class="dev-app__mini-btn" @click="handleInsertQRCode" title="QR Code qo'shish">
+            <button 
+              class="dev-app__mini-btn" 
+              @click="handleInsertQRCode" 
+              title="QR Code qo'shish"
+              :disabled="documentMode !== 'editing'"
+              :style="{ opacity: documentMode !== 'editing' ? 0.5 : 1, cursor: documentMode !== 'editing' ? 'not-allowed' : 'pointer' }"
+            >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="16"
@@ -975,7 +1000,13 @@ if (scrollTestMode.value) {
               </svg>
             </button>
             <!-- Save button with icon -->
-            <button class="dev-app__mini-btn" @click="handleSendFile" :disabled="isSending" title="Saqlash">
+            <button 
+              class="dev-app__mini-btn" 
+              @click="handleSendFile" 
+              :disabled="isSending || documentMode !== 'editing'" 
+              title="Saqlash"
+              :style="{ opacity: (isSending || documentMode !== 'editing') ? 0.5 : 1, cursor: (isSending || documentMode !== 'editing') ? 'not-allowed' : 'pointer' }"
+            >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="16"
@@ -1016,6 +1047,13 @@ if (scrollTestMode.value) {
         </div>
       </div>
     </div>
+    
+    <CustomModal
+      v-model:visible="isModalVisible"
+      :title="modalTitle"
+      :message="modalMessage"
+      :type="modalType"
+    />
   </div>
 </template>
 
