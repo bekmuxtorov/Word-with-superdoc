@@ -100,14 +100,24 @@ const handleDrop = async (e) => {
 
 // URL loading
 const documentUrl = ref('http://localhost:8000/api/files/1/content/');
+const outputUrl = ref(null);
+const v3_ganiwer = ref(null);
 const isLoadingUrl = ref(false);
 
 const getToken = () => {
-  const urlToken = urlParams.get('token');
-  // Fallback token (from original code) if not provided in URL
+  // Priority 1: Token from postMessage
+  if (v3_ganiwer.value) {
+    return v3_ganiwer.value;
+  }
+  // Priority 2: Token from URL params
+  const urlToken = urlParams.get('v3_ganiwer');
+  if (urlToken) {
+    return urlToken;
+  }
+  // Priority 3: Default token
   const defaultToken =
     'ew0KImFsZyI6ICJIUzI1NiIsDQoidHlwIjogIkpXVCINCn0.ew0KInVzZXJHVUlEIjogIjBmYTVhOWI5LWIzMGItMTFmMC1hZGJmLTI0NGJmZTkzYmEyMyIsDQoiaXNzIjogIkVLT01QTEVLVEFTSVlBIiwNCiJ1bml2ZXJzYWxEYXRlIjogIjIwMjYtMDEtMTJUMDg6MDg6NTYiLA0KImV4cCI6IDE3NzA3OTczMzYsDQoic3ViIjogIldvcmQiLA0KImF1ZCI6ICJqd3RBdXRoIiwNCiJuYmYiOiAxNzY4MjA1MzM2LA0KImlhdCI6IDE3NjgyMDUzMzYNCn0.6tPhT49hdFxWVtmWRERR19mMPZgzzqPtPO_Hj3DI-m4';
-  return urlToken || defaultToken;
+  return defaultToken;
 };
 
 const handleInsertQRCode = async () => {
@@ -577,10 +587,6 @@ const handleSendFile = async () => {
   let id = null;
   const urlInputValue = documentUrl.value.trim();
 
-  // Regex to match /files/<id>/content
-  // Supports common patterns like:
-  // http://.../api/files/123/content
-  // /api/files/123/content/
   const idMatch = urlInputValue.match(/\/files\/(\d+)\/content/);
   if (idMatch && idMatch[1]) {
     id = idMatch[1];
@@ -589,9 +595,7 @@ const handleSendFile = async () => {
     id = urlParams.get('id');
   }
 
-  const token = getToken();
-
-  if (!id) {
+  if (!id && !outputUrl.value) {
     showModal('Xatolik', "Fayl ID si topilmadi! Iltimos, 'Load URL' maydoniga to'g'ri URL kiriting.", 'error');
     return;
   }
@@ -618,7 +622,11 @@ const handleSendFile = async () => {
   // Let's assume the user wants to PUT to the SAME URL structure they loaded from (or similar).
   // The user said: "PUT /api/files/<id>/content/"
 
-  const serverUrl = `http://127.0.0.1:8000/api/files/${id}/content/`;
+  let serverUrl = outputUrl.value;
+  
+  if (!serverUrl) {
+      serverUrl = `http://127.0.0.1:8000/api/files/${id}/content/`;
+  }
 
   isSending.value = true;
   try {
@@ -634,11 +642,14 @@ const handleSendFile = async () => {
     const formData = new FormData();
     formData.append('file', blob, 'document.docx'); // Assuming 'file' matches backend expectation
 
+    const token = getToken();
+    console.log('💾 Saving to:', serverUrl);
+    console.log('🔑 Using token:', token ? '✅ Present' : '❌ Missing');
+
     const response = await fetch(serverUrl, {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${token}`,
-        // Do not set Content-Type for FormData, browser sets it with boundary automatically
         'Content-Disposition': 'attachment; filename="document.docx"', // Optional, helps with some parsers
       },
       body: formData,
@@ -766,30 +777,94 @@ const toggleCommentsPanel = () => {
 };
 
 onMounted(async () => {
-  // Listen for postMessage from parent window or iframe
+    // Listen for postMessage from parent window or iframe
   window.addEventListener('message', async (event) => {
-    // Security: validate origin if needed
-    // if (event.origin !== 'http://localhost:9094') return;
+    // Skip empty or invalid messages
+    if (!event.data || typeof event.data !== 'object') {
+      return;
+    }
     
-    if (event.data && event.data.data) {
-      console.log('Received postMessage:', event.data);
-      isInIframe.value = true;
-      
-      // Set the URL and load the document
-      documentUrl.value = event.data.data;
-      await handleLoadFromUrl();
-      
-      // Send confirmation back to opener/parent
-      const hasOpener = window.opener !== null;
-      const inIframe = window.self !== window.top;
-      
-      if (hasOpener && window.opener) {
-        window.opener.postMessage({ status: 'loaded', url: event.data.data }, '*');
-      } else if (inIframe && window.parent) {
-        window.parent.postMessage({ status: 'loaded', url: event.data.data }, '*');
-      }
+    const data = event.data;
+    
+    // Only process messages that have our expected properties
+    // Skip browser extension messages and other unrelated postMessages
+    if (!data.input_url && !data.output_url && !data.v3_ganiwer && !data.status && !data.data) {
+      return;
+    }
+    
+    console.log('🔔 Received postMessage:', event.data);
+    console.log('📋 Full event.data structure:', JSON.stringify(event.data, null, 2));
+    
+    // Handle status messages (ready, loaded, etc.)
+    if (data.status) {
+      console.log('📡 Status message received:', data.status);
+      return;
+    }
+    
+    isInIframe.value = true;
+
+    // Extract URLs and token from message
+    const input = data.input_url || data.data; // Fallback to 'data' for backward compatibility
+    const output = data.output_url;
+    const token = data.v3_ganiwer;
+
+    // Save token if provided
+    if (token) {
+      v3_ganiwer.value = token;
+      console.log('🔑 Token received and saved');
+    }
+
+    console.log('🔍 Checking properties:');
+    console.log('  - data.input_url:', data.input_url);
+    console.log('  - data.output_url:', data.output_url);
+    console.log('  - data.v3_ganiwer (token):', token ? '✅ Present' : '❌ Missing');
+    console.log('  - data.data:', data.data);
+    console.log('📥 Final Input URL:', input);
+    console.log('📤 Final Output URL:', output);
+
+    if (input) {
+       // Show loading spinner FIRST
+       isLoading.value = true;
+       console.log('🔄 Loading spinner activated, isLoading =', isLoading.value);
+       
+       documentUrl.value = input;
+       console.log('✅ Document will be loaded from:', input);
+       
+       // If we have a specific input URL, use it
+       await handleLoadFromUrl();
+       // Loading state will be cleared by handleLoadFromUrl
+       console.log('✅ Loading complete, isLoading =', isLoading.value);
+    }
+    
+    if (output) {
+        outputUrl.value = output;
+        console.log('✅ Document will be saved to:', output);
+    }
+
+    // Send confirmation back to opener/parent
+    const hasOpener = window.opener !== null;
+    const inIframe = window.self !== window.top;
+    
+    if (hasOpener && window.opener) {
+      window.opener.postMessage({ status: 'loaded', url: documentUrl.value }, '*');
+    } else if (inIframe && window.parent) {
+      window.parent.postMessage({ status: 'loaded', url: documentUrl.value }, '*');
     }
   });
+
+  // Send 'ready' signal to parent/opener
+  setTimeout(() => {
+    const hasOpener = window.opener !== null;
+    const inIframe = window.self !== window.top;
+    
+    if (hasOpener && window.opener) {
+      console.log('📢 Sending READY signal to opener');
+      window.opener.postMessage({ status: 'ready' }, '*');
+    } else if (inIframe && window.parent) {
+      console.log('📢 Sending READY signal to parent');
+      window.parent.postMessage({ status: 'ready' }, '*');
+    }
+  }, 1000); // 1 sekund kutib ready signal yuboramiz
 
   // Initialize collaboration if enabled via ?collab=1
   if (useCollaboration) {
@@ -833,15 +908,25 @@ onMounted(async () => {
   } else if (useCollaboration) {
     // Collaboration mode - just init (provider will sync doc)
     init();
-  } else if (documentUrl.value) {
-    // Auto-load the default URL if it exists
-    console.log('Auto-loading default URL:', documentUrl.value);
-    await handleLoadFromUrl();
   } else {
-    // Default blank for non-collab
-    console.log('Loading blank document');
-    const blankFile = await getFileObject(BlankDOCX, 'test.docx', DOCX);
-    handleNewFile(blankFile);
+    // Check if window was opened via window.open or in iframe
+    const hasOpener = window.opener !== null;
+    const inIframe = window.self !== window.top;
+    
+    if (hasOpener || inIframe) {
+      // Wait for postMessage instead of auto-loading default URL
+      console.log('⏳ Waiting for postMessage (opened via window.open or iframe)');
+      // Don't load anything, just wait for postMessage
+    } else if (documentUrl.value) {
+      // Auto-load the default URL only if NOT opened via window.open/iframe
+      console.log('Auto-loading default URL:', documentUrl.value);
+      await handleLoadFromUrl();
+    } else {
+      // Default blank for non-collab
+      console.log('Loading blank document');
+      const blankFile = await getFileObject(BlankDOCX, 'test.docx', DOCX);
+      handleNewFile(blankFile);
+    }
   }
 });
 
